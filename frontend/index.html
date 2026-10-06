@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text2Arch</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+
+<header>
+    <h1>Text2Arch</h1>
+    <p>Generate Software Architecture Diagrams from Natural Language</p>
+</header>
+
+<main>
+    <section class="input-panel">
+        <h2>Describe Your Architecture</h2>
+
+        <textarea
+            id="description"
+            placeholder="Example: A React frontend communicates with a Spring Boot backend. The backend connects to a MySQL database."
+        ></textarea>
+
+        <button id="generateBtn" onclick="generateArchitecture()">
+            Generate Architecture
+        </button>
+
+        <p id="status"></p>
+    </section>
+
+    <section class="diagram-panel">
+        <h2>Architecture Diagram</h2>
+
+        <div id="diagramContainer">
+            <p class="placeholder">
+                Your generated architecture diagram will appear here.
+            </p>
+        </div>
+    </section>
+</main>
+
+<script src="script.js"></script>
+
+
+</body>
+</html>
