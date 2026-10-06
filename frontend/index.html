@@ -1,49 +1,504 @@
 <!DOCTYPE html>
-
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text2Arch</title>
+    <title>Text2Arch | AI Architecture Generator</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
-
-<header>
-    <h1>Text2Arch</h1>
-    <p>Generate Software Architecture Diagrams from Natural Language</p>
+<!-- ================= HEADER ================= -->
+<header class="top-header">
+    <div class="header-content">
+        <div class="brand">
+            <div class="brand-icon">T2A</div>
+            <div>
+                <h1>Text2Arch</h1>
+                <p>
+                    AI-Powered Natural Language to Software Architecture
+                </p>
+            </div>
+        </div>
+        <div class="header-right">
+            <span class="status-dot"></span>
+            <span>AI Architecture Workspace</span>
+        </div>
+    </div>
 </header>
 
-<main>
-    <section class="input-panel">
-        <h2>Describe Your Architecture</h2>
+<!-- ================= MAIN APPLICATION ================= -->
+<main class="app-container">
+    <!-- ================= TOP SECTION ================= -->
+    <section class="workspace-grid">
+        <!-- ========== DESCRIPTION BOX ========== -->
+        <div class="card input-card">
+            <div class="card-header">
+                <div>
+                    <span class="step-label">
+                        STEP 01
+                    </span>
+                    <h2>
+                        Describe Your Architecture
+                    </h2>
+                </div>
+                <div class="header-icon">
+                    ✎
+                </div>
+            </div>
+            <p class="description">
+                Describe your software system using natural language.
+                Mention components, technologies and how they communicate.
+            </p>
+            <label
+                for="description"
+                class="input-label"
+            >
+                Architecture Description
+            </label>
+            <textarea
+                id="description"
+                maxlength="2000"
+                placeholder="Example: A React frontend communicates with a Spring Boot backend. The backend connects to a MySQL database."
+            ></textarea>
+            <div class="input-info">
+                <span id="charCount">
+                    0 / 2000
+                </span>
+                <button
+                    type="button"
+                    id="exampleBtn"
+                    class="text-button"
+                >
+                    Use Example
+                </button>
+            </div>
+            <button
+                id="generateBtn"
+                class="generate-button"
+                onclick="generateArchitecture()"
+            >
+                <span>Generate Architecture</span>
+                <span class="arrow">
+                    →
+                </span>
+            </button>
+            <div
+                id="status"
+                class="status"
+                aria-live="polite"
+            ></div>
+            <!-- Tips -->
+            <div class="tips-box">
+                <h3>
+                    💡 Tips for better results
+                </h3>
+                <ul>
+                    <li>
+                        Mention the main components of your system.
+                    </li>
+                    <li>
+                        Describe communication between components.
+                    </li>
 
-        <textarea
-            id="description"
-            placeholder="Example: A React frontend communicates with a Spring Boot backend. The backend connects to a MySQL database."
-        ></textarea>
-
-        <button id="generateBtn" onclick="generateArchitecture()">
-            Generate Architecture
-        </button>
-
-        <p id="status"></p>
+                    <li>
+                        Mention databases and external services.
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <!-- ========== DIAGRAM BOX ========== -->
+        <div class="card diagram-card">
+            <div class="card-header">
+                <div>
+                    <span class="step-label">
+                        STEP 02
+                    </span>
+                    <h2>
+                        Architecture Diagram
+                    </h2>
+                </div>
+                <div class="diagram-toolbar">
+                    <button
+                        id="zoomInBtn"
+                        class="toolbar-button"
+                        type="button"
+                        title="Zoom in"
+                    >
+                        +
+                    </button>
+                    <button
+                        id="zoomOutBtn"
+                        class="toolbar-button"
+                        type="button"
+                        title="Zoom out"
+                    >
+                        −
+                    </button>
+                    <button
+                        id="resetZoomBtn"
+                        class="toolbar-button reset-button"
+                        type="button"
+                    >
+                        Reset
+                    </button>
+                </div>
+            </div>
+            <p class="description">
+                Generated software architecture will appear here.
+            </p>
+            <div id="diagramContainer">
+                <div class="empty-state">
+                    <div class="architecture-icon">
+                        ◇
+                    </div>
+                    <h3>
+                        No Architecture Generated
+                    </h3>
+                    <p>
+                        Enter a system description on the left
+                        and generate your architecture diagram.
+                    </p>
+                    <div class="empty-hint">
+                        Natural Language → AI → Architecture
+                    </div>
+                </div>
+            </div>
+            <!-- Diagram legend -->
+            <div class="diagram-legend">
+                <span>
+                    <i class="legend-box frontend"></i>
+                    Frontend
+                </span>
+                <span>
+                    <i class="legend-box backend"></i>
+                    Backend
+                </span>
+                <span>
+                    <i class="legend-box database"></i>
+                    Database
+                </span>
+                <span>
+                    <i class="legend-box service"></i>
+                    Service
+                </span>
+            </div>
+        </div>
+    </section>
+    <!-- ================= STATISTICS ================= -->
+    <section class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">
+                ◈
+            </div>
+            <div>
+                <span class="stat-label">
+                    ARCHITECTURE STATUS
+                </span>
+                <strong id="architectureStatus">
+                    Not Generated
+                </strong>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                ◇
+            </div>
+            <div>
+                <span class="stat-label">
+                    COMPONENTS
+                </span>
+                <strong id="componentCount">
+                    0
+                </strong>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                ↔
+            </div>
+            <div>
+                <span class="stat-label">
+                    CONNECTIONS
+                </span>
+                <strong id="connectionCount">
+                    0
+                </strong>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                AI
+            </div>
+            <div>
+                <span class="stat-label">
+                    GENERATION MODE
+                </span>
+                <strong>
+                    AI Powered
+                </strong>
+            </div>
+        </div>
+    </section>
+    <!-- ================= INTERACTIVE EDITOR ================= -->
+    <section class="card editor-card">
+        <div class="card-header">
+            <div>
+                <span class="step-label">
+                    STEP 03
+                </span>
+                <h2>
+                    Interactive Architecture Editor
+                </h2>
+            </div>
+            <span class="coming-badge">
+                Editor Workspace
+            </span>
+        </div>
+        <p class="description">
+            Modify the generated architecture after generation.
+            Select components, edit labels and manage connections.
+        </p>
+        <div class="editor-tools">
+            <button
+                id="selectNodeBtn"
+                class="editor-button"
+                type="button"
+            >
+                ◉ Select Node
+            </button>
+            <button
+                id="editNodeBtn"
+                class="editor-button"
+                type="button"
+            >
+                ✎ Edit Node
+            </button>
+            <button
+                id="addNodeBtn"
+                class="editor-button"
+                type="button"
+            >
+                ＋ Add Node
+            </button>
+            <button
+                id="deleteNodeBtn"
+                class="editor-button danger"
+                type="button"
+            >
+                − Delete Node
+            </button>
+            <button
+                id="addEdgeBtn"
+                class="editor-button"
+                type="button"
+            >
+                ↔ Add Connection
+            </button>
+            <button
+                id="deleteEdgeBtn"
+                class="editor-button danger"
+                type="button"
+            >
+                × Delete Connection
+            </button>
+        </div>
+        <div class="editor-info">
+            <div>
+                <span>
+                    Selected Component
+                </span>
+                <strong id="selectedNode">
+                    None
+                </strong>
+            </div>
+            <div>
+                <span>
+                    Editor Status
+                </span>
+                <strong id="editorStatus">
+                    Ready
+                </strong>
+            </div>
+        </div>
     </section>
 
-    <section class="diagram-panel">
-        <h2>Architecture Diagram</h2>
-
-        <div id="diagramContainer">
-            <p class="placeholder">
-                Your generated architecture diagram will appear here.
+    <!-- ================= EXPORT SECTION ================= -->
+    <section class="bottom-grid">
+        <!-- Architecture Information -->
+        <div class="card information-card">
+            <span class="step-label">
+                ARCHITECTURE INFORMATION
+            </span>
+            <h2>
+                Generated Representation
+            </h2>
+            <p>
+                Text2Arch converts natural-language descriptions
+                into a structured software architecture representation.
             </p>
+            <div class="pipeline">
+                <span>
+                    Natural Language
+                </span>
+                <span class="pipeline-arrow">
+                    →
+                </span>
+                <span>
+                    AI Model
+                </span>
+                <span class="pipeline-arrow">
+                    →
+                </span>
+                <span>
+                    Architecture
+                </span>
+                <span class="pipeline-arrow">
+                    →
+                </span>
+                <span>
+                    Diagram
+                </span>
+            </div>
+        </div>
+        <!-- Export -->
+        <div class="card export-card">
+            <span class="step-label">
+                EXPORT
+            </span>
+            <h2>
+                Save Architecture
+            </h2>
+            <p>
+                Export the generated architecture for further use.
+            </p>
+            <div class="export-buttons">
+                <button
+                    id="downloadSvgBtn"
+                    type="button"
+                    class="export-button"
+                >
+                    ↓ Download SVG
+                </button>
+                <button
+                    id="exportJsonBtn"
+                    type="button"
+                    class="export-button secondary"
+                >
+                    {} Export JSON
+                </button>
+            </div>
         </div>
     </section>
 </main>
 
+<!-- ================= FOOTER ================= -->
+<footer>
+    <div>
+        <strong>
+            Text2Arch
+        </strong>
+        <span>
+            AI-Based Natural Language to Software Architecture
+        </span>
+    </div>
+    <span>
+        Interactive Architecture Generation Platform
+    </span>
+</footer>
+
+<!-- ================= EXISTING SCRIPT ================= -->
 <script src="script.js"></script>
+<!-- ================= FRONTEND UI LOGIC ================= -->
+<script>
+const descriptionInput =
+    document.getElementById("description");
+const charCount =
+    document.getElementById("charCount");
+const exampleBtn =
+    document.getElementById("exampleBtn");
 
-
+const exampleText =
+    "A React frontend communicates with a Spring Boot backend. The backend connects to a MySQL database.";
+/* Character counter */
+descriptionInput.addEventListener(
+    "input",
+    function () {
+        charCount.textContent =
+            `${descriptionInput.value.length} / 2000`;
+    }
+);
+/* Example button */
+exampleBtn.addEventListener(
+    "click",
+    function () {
+        descriptionInput.value =
+            exampleText;
+        charCount.textContent =
+            `${descriptionInput.value.length} / 2000`;
+        descriptionInput.focus();
+    }
+);
+/* Editor buttons */
+const editorButtons = [
+    "selectNodeBtn",
+    "editNodeBtn",
+    "addNodeBtn",
+    "deleteNodeBtn",
+    "addEdgeBtn",
+    "deleteEdgeBtn"
+];
+editorButtons.forEach(
+    function (id) {
+        const button =
+            document.getElementById(id);
+        button.addEventListener(
+            "click",
+            function () {
+                document.getElementById(
+                    "editorStatus"
+                ).textContent =
+                    "Editor feature ready for integration";
+            }
+        );
+    }
+);
+/* Export buttons */
+document
+    .getElementById("downloadSvgBtn")
+    .addEventListener(
+        "click",
+        function () {
+            const svg =
+                document.querySelector(
+                    "#diagramContainer svg"
+                );
+            if (!svg) {
+                alert(
+                    "Please generate an architecture first."
+                );
+                return;
+            }
+            const blob =
+                new Blob(
+                    [svg.outerHTML],
+                    {
+                        type: "image/svg+xml"
+                    }
+                );
+            const url =
+                URL.createObjectURL(blob);
+            const link =
+                document.createElement("a");
+            link.href = url;
+            link.download =
+                "text2arch-architecture.svg";
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    );
+/* Update basic status after generation */
+const originalGenerate =
+    window.generateArchitecture;
+</script>
 </body>
 </html>
