@@ -1,8 +1,15 @@
 import csv
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from evaluate import evaluate_prediction, extract_ground_truth
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM
+)
+
+from evaluate import (
+    evaluate_prediction,
+    extract_ground_truth
+)
 
 
 # ============================================================
@@ -21,7 +28,7 @@ MODEL_NAME = input(
 
 DATASET_PATH = "data/manual.tsv"
 
-# Keep testing limited to 5 samples for now
+# Keep testing limited to 5 samples
 MAX_SAMPLES = 5
 
 
@@ -47,7 +54,7 @@ print("Model loaded successfully!")
 
 
 # ============================================================
-# PROMPT
+# SYSTEM PROMPT
 # ============================================================
 
 SYSTEM_PROMPT = """
@@ -106,7 +113,7 @@ Output only DOT code.
         return_tensors="pt"
     )
 
-    # Move inputs to the same device as the model
+    # Move inputs to the model device
     inputs = {
         key: value.to(model.device)
         for key, value in inputs.items()
@@ -121,29 +128,40 @@ Output only DOT code.
             num_beams=1
         )
 
-    generated_tokens = outputs[
-        0
-    ][
-        inputs["input_ids"].shape[1]:
-    ]
+    generated_tokens = (
+        outputs[0][
+            inputs["input_ids"].shape[1]:
+        ]
+    )
 
     answer = tokenizer.decode(
         generated_tokens,
         skip_special_tokens=True
     ).strip()
 
-    # Remove Markdown fences if the model produces them
+    # --------------------------------------------------------
+    # Remove Markdown code fences if generated
+    # --------------------------------------------------------
+
     if answer.startswith("```"):
 
         lines = answer.splitlines()
 
-        if lines and lines[0].startswith("```"):
+        if (
+            lines
+            and lines[0].strip().startswith("```")
+        ):
             lines = lines[1:]
 
-        if lines and lines[-1].strip() == "```":
+        if (
+            lines
+            and lines[-1].strip() == "```"
+        ):
             lines = lines[:-1]
 
-        answer = "\n".join(lines).strip()
+        answer = "\n".join(
+            lines
+        ).strip()
 
     return answer
 
@@ -152,29 +170,38 @@ Output only DOT code.
 # PRINT METRICS
 # ============================================================
 
-def print_metrics(title, metrics):
-
-    print(f"\n--- {title} ---")
+def print_metrics(
+    title,
+    metrics
+):
 
     print(
-        f"Precision : {metrics['precision']:.4f}"
+        f"\n--- {title} ---"
     )
 
     print(
-        f"Recall    : {metrics['recall']:.4f}"
+        f"Precision : "
+        f"{metrics['precision']:.4f}"
     )
 
     print(
-        f"F1 Score  : {metrics['f1']:.4f}"
+        f"Recall    : "
+        f"{metrics['recall']:.4f}"
     )
 
     print(
-        f"Jaccard   : {metrics['jaccard']:.4f}"
+        f"F1 Score  : "
+        f"{metrics['f1']:.4f}"
+    )
+
+    print(
+        f"Jaccard   : "
+        f"{metrics['jaccard']:.4f}"
     )
 
 
 # ============================================================
-# MAIN EVALUATION
+# MAIN
 # ============================================================
 
 def main():
@@ -183,13 +210,25 @@ def main():
     print("TEXT2ARCH EVALUATION")
     print("======================================")
 
-    print("Model   :", MODEL_NAME)
-    print("Dataset :", DATASET_PATH)
-    print("Samples :", MAX_SAMPLES)
+    print(
+        f"Model   : {MODEL_NAME}"
+    )
 
-    print("======================================\n")
+    print(
+        f"Dataset : {DATASET_PATH}"
+    )
+
+    print(
+        f"Samples : {MAX_SAMPLES}"
+    )
+
+    print("======================================")
 
     results = []
+
+    # --------------------------------------------------------
+    # Read dataset
+    # --------------------------------------------------------
 
     with open(
         DATASET_PATH,
@@ -203,22 +242,17 @@ def main():
             delimiter="\t"
         )
 
+        # ----------------------------------------------------
+        # Evaluate first 5 samples
+        # ----------------------------------------------------
+
         for sample_number, row in enumerate(
             reader,
             start=1
         ):
 
-            # Keep only first 5 samples
             if sample_number > MAX_SAMPLES:
                 break
-
-            description = row[
-                "Cleaned Description"
-            ]
-
-            ground_truth_dot = row[
-                "Dot code"
-            ]
 
             print("\n======================================")
             print(
@@ -228,22 +262,47 @@ def main():
 
             try:
 
-                # --------------------------------
-                # 1. Generate prediction
-                # --------------------------------
+                description = row[
+                    "Cleaned Description"
+                ]
 
-                print("\nGenerating DOT...")
+                ground_truth_dot = row[
+                    "Dot code"
+                ]
+
+                # ------------------------------------------------
+                # 1. Generate prediction
+                # ------------------------------------------------
+
+                print(
+                    "\nGenerating DOT..."
+                )
 
                 predicted_dot = generate_dot(
                     description
                 )
 
-                print("\n===== GENERATED DOT =====")
-                print(predicted_dot)
+                # ------------------------------------------------
+                # 2. Validate generated output
+                # ------------------------------------------------
 
-                # --------------------------------
-                # 2. Extract ground truth
-                # --------------------------------
+                if not predicted_dot.strip():
+
+                    raise ValueError(
+                        "Model returned empty output."
+                    )
+
+                print(
+                    "\n===== GENERATED DOT ====="
+                )
+
+                print(
+                    predicted_dot
+                )
+
+                # ------------------------------------------------
+                # 3. Extract ground truth
+                # ------------------------------------------------
 
                 expected_nodes, expected_edges = (
                     extract_ground_truth(
@@ -251,9 +310,23 @@ def main():
                     )
                 )
 
-                # --------------------------------
-                # 3. ACTUALLY EVALUATE
-                # --------------------------------
+                print(
+                    "\n===== GROUND TRUTH ====="
+                )
+
+                print(
+                    "Expected nodes:",
+                    expected_nodes
+                )
+
+                print(
+                    "Expected edges:",
+                    expected_edges
+                )
+
+                # ------------------------------------------------
+                # 4. ACTUALLY EVALUATE PREDICTION
+                # ------------------------------------------------
 
                 evaluation_result = (
                     evaluate_prediction(
@@ -263,9 +336,31 @@ def main():
                     )
                 )
 
-                # --------------------------------
-                # 4. Get metrics
-                # --------------------------------
+                # ------------------------------------------------
+                # 5. Predicted graph
+                # ------------------------------------------------
+
+                print(
+                    "\n===== PREDICTED GRAPH ====="
+                )
+
+                print(
+                    "Predicted nodes:",
+                    evaluation_result[
+                        "predicted_nodes"
+                    ]
+                )
+
+                print(
+                    "Predicted edges:",
+                    evaluation_result[
+                        "predicted_edges"
+                    ]
+                )
+
+                # ------------------------------------------------
+                # 6. Node metrics
+                # ------------------------------------------------
 
                 node_metrics = (
                     evaluation_result[
@@ -273,90 +368,105 @@ def main():
                     ]
                 )
 
+                print_metrics(
+                    "NODE METRICS",
+                    node_metrics
+                )
+
+                # ------------------------------------------------
+                # 7. Edge metrics
+                # ------------------------------------------------
+
                 edge_metrics = (
                     evaluation_result[
                         "edge_metrics"
                     ]
                 )
 
-                # --------------------------------
-                # 5. Display prediction
-                # --------------------------------
-
-                print(
-                    "\n===== PREDICTED NODES ====="
-                )
-
-                print(
-                    evaluation_result[
-                        "predicted_nodes"
-                    ]
-                )
-
-                print(
-                    "\n===== PREDICTED EDGES ====="
-                )
-
-                print(
-                    evaluation_result[
-                        "predicted_edges"
-                    ]
-                )
-
-                # --------------------------------
-                # 6. Display NODE metrics
-                # --------------------------------
-
-                print_metrics(
-                    "NODE METRICS",
-                    node_metrics
-                )
-
-                # --------------------------------
-                # 7. Display EDGE metrics
-                # --------------------------------
-
                 print_metrics(
                     "EDGE METRICS",
                     edge_metrics
                 )
 
-                # --------------------------------
-                # 8. Save result
-                # --------------------------------
+                # ------------------------------------------------
+                # 8. Store results
+                # ------------------------------------------------
 
                 results.append({
-                    "sample": sample_number,
+
+                    "sample":
+                        sample_number,
+
                     "node_precision":
-                        node_metrics["precision"],
+                        node_metrics[
+                            "precision"
+                        ],
+
                     "node_recall":
-                        node_metrics["recall"],
+                        node_metrics[
+                            "recall"
+                        ],
+
                     "node_f1":
-                        node_metrics["f1"],
+                        node_metrics[
+                            "f1"
+                        ],
+
                     "node_jaccard":
-                        node_metrics["jaccard"],
+                        node_metrics[
+                            "jaccard"
+                        ],
+
                     "edge_precision":
-                        edge_metrics["precision"],
+                        edge_metrics[
+                            "precision"
+                        ],
+
                     "edge_recall":
-                        edge_metrics["recall"],
+                        edge_metrics[
+                            "recall"
+                        ],
+
                     "edge_f1":
-                        edge_metrics["f1"],
+                        edge_metrics[
+                            "f1"
+                        ],
+
                     "edge_jaccard":
-                        edge_metrics["jaccard"]
+                        edge_metrics[
+                            "jaccard"
+                        ]
                 })
+
+            # ----------------------------------------------------
+            # Failed/invalid prediction
+            # ----------------------------------------------------
 
             except Exception as error:
 
                 print(
-                    f"\nERROR in sample "
-                    f"{sample_number}:"
+                    f"\nFAILED SAMPLE "
+                    f"{sample_number}"
                 )
 
-                print(error)
+                print(
+                    f"Reason: {error}"
+                )
+
+                print(
+                    "Skipping this sample "
+                    "and continuing."
+                )
+
+                continue
 
     # ========================================================
-    # AVERAGES
+    # FINAL AVERAGES
     # ========================================================
+
+    print("\n======================================")
+    print("FINAL RESULTS")
+    print("======================================")
 
     if not results:
 
@@ -366,104 +476,111 @@ def main():
 
         return
 
-    average_node_precision = sum(
-        r["node_precision"]
-        for r in results
+    # --------------------------------------------------------
+    # Node averages
+    # --------------------------------------------------------
+
+    avg_node_precision = sum(
+        result["node_precision"]
+        for result in results
     ) / len(results)
 
-    average_node_recall = sum(
-        r["node_recall"]
-        for r in results
+    avg_node_recall = sum(
+        result["node_recall"]
+        for result in results
     ) / len(results)
 
-    average_node_f1 = sum(
-        r["node_f1"]
-        for r in results
+    avg_node_f1 = sum(
+        result["node_f1"]
+        for result in results
     ) / len(results)
 
-    average_node_jaccard = sum(
-        r["node_jaccard"]
-        for r in results
+    avg_node_jaccard = sum(
+        result["node_jaccard"]
+        for result in results
     ) / len(results)
 
-    average_edge_precision = sum(
-        r["edge_precision"]
-        for r in results
+    # --------------------------------------------------------
+    # Edge averages
+    # --------------------------------------------------------
+
+    avg_edge_precision = sum(
+        result["edge_precision"]
+        for result in results
     ) / len(results)
 
-    average_edge_recall = sum(
-        r["edge_recall"]
-        for r in results
+    avg_edge_recall = sum(
+        result["edge_recall"]
+        for result in results
     ) / len(results)
 
-    average_edge_f1 = sum(
-        r["edge_f1"]
-        for r in results
+    avg_edge_f1 = sum(
+        result["edge_f1"]
+        for result in results
     ) / len(results)
 
-    average_edge_jaccard = sum(
-        r["edge_jaccard"]
-        for r in results
+    avg_edge_jaccard = sum(
+        result["edge_jaccard"]
+        for result in results
     ) / len(results)
 
-    # ========================================================
-    # FINAL RESULTS
-    # ========================================================
-
-    print("\n")
-    print("======================================")
-    print("FINAL RESULTS")
-    print("======================================")
+    # --------------------------------------------------------
+    # Print final results
+    # --------------------------------------------------------
 
     print(
-        f"\nSuccessful samples: "
-        f"{len(results)}"
+        f"\nSuccessfully evaluated: "
+        f"{len(results)} / {MAX_SAMPLES}"
     )
 
     print("\nNODE RESULTS")
 
     print(
         f"Precision : "
-        f"{average_node_precision:.4f}"
+        f"{avg_node_precision:.4f}"
     )
 
     print(
         f"Recall    : "
-        f"{average_node_recall:.4f}"
+        f"{avg_node_recall:.4f}"
     )
 
     print(
         f"F1 Score  : "
-        f"{average_node_f1:.4f}"
+        f"{avg_node_f1:.4f}"
     )
 
     print(
         f"Jaccard   : "
-        f"{average_node_jaccard:.4f}"
+        f"{avg_node_jaccard:.4f}"
     )
 
     print("\nEDGE RESULTS")
 
     print(
         f"Precision : "
-        f"{average_edge_precision:.4f}"
+        f"{avg_edge_precision:.4f}"
     )
 
     print(
         f"Recall    : "
-        f"{average_edge_recall:.4f}"
+        f"{avg_edge_recall:.4f}"
     )
 
     print(
         f"F1 Score  : "
-        f"{average_edge_f1:.4f}"
+        f"{avg_edge_f1:.4f}"
     )
 
     print(
         f"Jaccard   : "
-        f"{average_edge_jaccard:.4f}"
+        f"{avg_edge_jaccard:.4f}"
     )
 
+
+# ============================================================
+# RUN
+# ============================================================
 
 if __name__ == "__main__":
     main()
