@@ -1,0 +1,1175 @@
+{
+  "config": {
+    "model": "qwen3:8b",
+    "dataset": null,
+    "samples": 5,
+    "start": 1,
+    "all": false,
+    "prompt": "flow",
+    "max_tokens": 1500,
+    "num_ctx": 8192,
+    "timeout": 900,
+    "no_think": true
+  },
+  "summary": {
+    "exact": {
+      "node": {
+        "macro": {
+          "precision": 0.41969696969696973,
+          "recall": 0.3808441558441559,
+          "f1": 0.3965962732919255,
+          "jaccard": 0.2826690821256038
+        },
+        "micro": {
+          "precision": 0.4426229508196721,
+          "recall": 0.40298507462686567,
+          "f1": 0.421875,
+          "jaccard": 0.26732673267326734,
+          "tp": 27,
+          "fp": 34,
+          "fn": 40
+        }
+      },
+      "edge": {
+        "macro": {
+          "precision": 0.13007518796992482,
+          "recall": 0.09523809523809523,
+          "f1": 0.10900163666121113,
+          "jaccard": 0.06911111111111111
+        },
+        "micro": {
+          "precision": 0.19672131147540983,
+          "recall": 0.16666666666666666,
+          "f1": 0.18045112781954886,
+          "jaccard": 0.09917355371900827,
+          "tp": 12,
+          "fp": 49,
+          "fn": 60
+        }
+      }
+    },
+    "normalized": {
+      "node": {
+        "macro": {
+          "precision": 0.4671717171717171,
+          "recall": 0.4279416235937975,
+          "f1": 0.44450335807705904,
+          "jaccard": 0.32216666666666666
+        },
+        "micro": {
+          "precision": 0.4918032786885246,
+          "recall": 0.46153846153846156,
+          "f1": 0.4761904761904762,
+          "jaccard": 0.3125,
+          "tp": 30,
+          "fp": 31,
+          "fn": 35
+        }
+      },
+      "edge": {
+        "macro": {
+          "precision": 0.16165413533834586,
+          "recall": 0.11666666666666667,
+          "f1": 0.13453355155482813,
+          "jaccard": 0.09284848484848485
+        },
+        "micro": {
+          "precision": 0.2459016393442623,
+          "recall": 0.20833333333333334,
+          "f1": 0.2255639097744361,
+          "jaccard": 0.1271186440677966,
+          "tp": 15,
+          "fp": 46,
+          "fn": 57
+        }
+      }
+    },
+    "fuzzy": {
+      "node": {
+        "macro": {
+          "precision": 0.5821067821067821,
+          "recall": 0.5435593392115131,
+          "f1": 0.5593305598607825,
+          "jaccard": 0.418
+        },
+        "micro": {
+          "precision": 0.5901639344262295,
+          "recall": 0.5538461538461539,
+          "f1": 0.5714285714285714,
+          "jaccard": 0.4,
+          "tp": 36,
+          "fp": 25,
+          "fn": 29
+        }
+      },
+      "edge": {
+        "macro": {
+          "precision": 0.31593984962406013,
+          "recall": 0.24761904761904763,
+          "f1": 0.2756757426970193,
+          "jaccard": 0.18521080368906456
+        },
+        "micro": {
+          "precision": 0.32786885245901637,
+          "recall": 0.2777777777777778,
+          "f1": 0.3007518796992481,
+          "jaccard": 0.17699115044247787,
+          "tp": 20,
+          "fp": 41,
+          "fn": 52
+        }
+      }
+    }
+  },
+  "skipped": [],
+  "samples": [
+    {
+      "sample": 1,
+      "file": "2001.03004v1-Figure3-1.png",
+      "difficulty": "Medium",
+      "predicted_dot": "digraph {\n  \"I_t\" -> \"SPPN\"\n  \"I_k\" -> \"SPPN\"\n  \"SPPN\" -> \"m_t\"\n  \"SPPN\" -> \"m_k\"\n  \"SPPN\" -> \"Delta tilde H\"\n  \"I_k\" -> \"Flow Estimator\"\n  \"Delta tilde H\" -> \"Flow Estimator\"\n  \"Flow Estimator\" -> \"xi_{k->t}\"\n  \"I_k\" -> \"Appearance Encoder\"\n  \"Appearance Encoder\" -> \"Deformation Module\"\n  \"xi_{k->t}\" -> \"Deformation Module\"\n  \"Deformation Module\" -> \"Appearance Decoder\"\n  \"Delta tilde H\" -> \"Appearance Decoder\"\n  \"Appearance Decoder\" -> \"hat I_t\"\n}",
+      "raw_output": "digraph {\n  \"I_t\" -> \"SPPN\"\n  \"I_k\" -> \"SPPN\"\n  \"SPPN\" -> \"m_t\"\n  \"SPPN\" -> \"m_k\"\n  \"SPPN\" -> \"Delta tilde H\"\n  \"I_k\" -> \"Flow Estimator\"\n  \"Delta tilde H\" -> \"Flow Estimator\"\n  \"Flow Estimator\" -> \"xi_{k->t}\"\n  \"I_k\" -> \"Appearance Encoder\"\n  \"Appearance Encoder\" -> \"Deformation Module\"\n  \"xi_{k->t}\" -> \"Deformation Module\"\n  \"Deformation Module\" -> \"Appearance Decoder\"\n  \"Delta tilde H\" -> \"Appearance Decoder\"\n  \"Appearance Decoder\" -> \"hat I_t\"\n}",
+      "renders": true,
+      "expected_nodes": [
+        "appearance decoder",
+        "appearance encoder",
+        "deformation",
+        "flow estimator",
+        "i hat t",
+        "i k",
+        "i t",
+        "m k",
+        "m t",
+        "sparse point prediction network",
+        "δh"
+      ],
+      "expected_edges": [
+        [
+          "appearance decoder",
+          "i hat t"
+        ],
+        [
+          "appearance encoder",
+          "appearance decoder"
+        ],
+        [
+          "deformation",
+          "appearance decoder"
+        ],
+        [
+          "deformation",
+          "appearance encoder"
+        ],
+        [
+          "flow estimator",
+          "deformation"
+        ],
+        [
+          "i k",
+          "flow estimator"
+        ],
+        [
+          "i k",
+          "sparse point prediction network"
+        ],
+        [
+          "i t",
+          "sparse point prediction network"
+        ],
+        [
+          "m k",
+          "δh"
+        ],
+        [
+          "m t",
+          "δh"
+        ],
+        [
+          "sparse point prediction network",
+          "m k"
+        ],
+        [
+          "sparse point prediction network",
+          "m t"
+        ]
+      ],
+      "predicted_nodes": [
+        "appearance decoder",
+        "appearance encoder",
+        "deformation module",
+        "delta tilde h",
+        "flow estimator",
+        "hat i t",
+        "i k",
+        "i t",
+        "m k",
+        "m t",
+        "sppn",
+        "xi k t"
+      ],
+      "predicted_edges": [
+        [
+          "appearance decoder",
+          "hat i t"
+        ],
+        [
+          "appearance encoder",
+          "deformation module"
+        ],
+        [
+          "deformation module",
+          "appearance decoder"
+        ],
+        [
+          "delta tilde h",
+          "appearance decoder"
+        ],
+        [
+          "delta tilde h",
+          "flow estimator"
+        ],
+        [
+          "flow estimator",
+          "xi k t"
+        ],
+        [
+          "i k",
+          "appearance encoder"
+        ],
+        [
+          "i k",
+          "flow estimator"
+        ],
+        [
+          "i k",
+          "sppn"
+        ],
+        [
+          "i t",
+          "sppn"
+        ],
+        [
+          "sppn",
+          "delta tilde h"
+        ],
+        [
+          "sppn",
+          "m k"
+        ],
+        [
+          "sppn",
+          "m t"
+        ],
+        [
+          "xi k t",
+          "deformation module"
+        ]
+      ],
+      "metrics": {
+        "exact": {
+          "node": {
+            "precision": 0.5833333333333334,
+            "recall": 0.6363636363636364,
+            "f1": 0.6086956521739131,
+            "jaccard": 0.4375,
+            "tp": 7,
+            "fp": 5,
+            "fn": 4
+          },
+          "edge": {
+            "precision": 0.07142857142857142,
+            "recall": 0.08333333333333333,
+            "f1": 0.07692307692307691,
+            "jaccard": 0.04,
+            "tp": 1,
+            "fp": 13,
+            "fn": 11
+          }
+        },
+        "normalized": {
+          "node": {
+            "precision": 0.5833333333333334,
+            "recall": 0.6363636363636364,
+            "f1": 0.6086956521739131,
+            "jaccard": 0.4375,
+            "tp": 7,
+            "fp": 5,
+            "fn": 4
+          },
+          "edge": {
+            "precision": 0.07142857142857142,
+            "recall": 0.08333333333333333,
+            "f1": 0.07692307692307691,
+            "jaccard": 0.04,
+            "tp": 1,
+            "fp": 13,
+            "fn": 11
+          }
+        },
+        "fuzzy": {
+          "node": {
+            "precision": 0.6666666666666666,
+            "recall": 0.7272727272727273,
+            "f1": 0.6956521739130435,
+            "jaccard": 0.5333333333333333,
+            "tp": 8,
+            "fp": 4,
+            "fn": 3
+          },
+          "edge": {
+            "precision": 0.14285714285714285,
+            "recall": 0.16666666666666666,
+            "f1": 0.15384615384615383,
+            "jaccard": 0.08333333333333333,
+            "tp": 2,
+            "fp": 12,
+            "fn": 10
+          }
+        }
+      }
+    },
+    {
+      "sample": 2,
+      "file": "2001.10966v1-Figure2-1.png",
+      "difficulty": "Easy",
+      "predicted_dot": "digraph {\n  \"Face Image Database\" -> \"Feature Extraction\"\n  \"Feature Extraction\" -> \"Labeled Feature Vector Database\"\n  \"Test Image\" -> \"Feature Extraction\"\n  \"Feature Extraction\" -> \"Classifier\"\n  \"Classifier\" -> \"Label\"\n}",
+      "raw_output": "digraph {\n  \"Face Image Database\" -> \"Feature Extraction\"\n  \"Feature Extraction\" -> \"Labeled Feature Vector Database\"\n  \"Test Image\" -> \"Feature Extraction\"\n  \"Feature Extraction\" -> \"Classifier\"\n  \"Classifier\" -> \"Label\"\n}",
+      "renders": true,
+      "expected_nodes": [
+        "classifier evaluated kullback leibler",
+        "face image database",
+        "feature extraction ilbp",
+        "label male female",
+        "labeled feature vector database",
+        "test image"
+      ],
+      "expected_edges": [
+        [
+          "classifier evaluated kullback leibler",
+          "label male female"
+        ],
+        [
+          "face image database",
+          "feature extraction ilbp"
+        ],
+        [
+          "feature extraction ilbp",
+          "classifier evaluated kullback leibler"
+        ],
+        [
+          "feature extraction ilbp",
+          "labeled feature vector database"
+        ],
+        [
+          "labeled feature vector database",
+          "classifier evaluated kullback leibler"
+        ],
+        [
+          "test image",
+          "feature extraction ilbp"
+        ]
+      ],
+      "predicted_nodes": [
+        "classifier",
+        "face image database",
+        "feature extraction",
+        "label",
+        "labeled feature vector database",
+        "test image"
+      ],
+      "predicted_edges": [
+        [
+          "classifier",
+          "label"
+        ],
+        [
+          "face image database",
+          "feature extraction"
+        ],
+        [
+          "feature extraction",
+          "classifier"
+        ],
+        [
+          "feature extraction",
+          "labeled feature vector database"
+        ],
+        [
+          "test image",
+          "feature extraction"
+        ]
+      ],
+      "metrics": {
+        "exact": {
+          "node": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "jaccard": 0.3333333333333333,
+            "tp": 3,
+            "fp": 3,
+            "fn": 3
+          },
+          "edge": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 5,
+            "fn": 6
+          }
+        },
+        "normalized": {
+          "node": {
+            "precision": 0.5,
+            "recall": 0.5,
+            "f1": 0.5,
+            "jaccard": 0.3333333333333333,
+            "tp": 3,
+            "fp": 3,
+            "fn": 3
+          },
+          "edge": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 5,
+            "fn": 6
+          }
+        },
+        "fuzzy": {
+          "node": {
+            "precision": 0.6666666666666666,
+            "recall": 0.6666666666666666,
+            "f1": 0.6666666666666666,
+            "jaccard": 0.5,
+            "tp": 4,
+            "fp": 2,
+            "fn": 2
+          },
+          "edge": {
+            "precision": 0.6,
+            "recall": 0.5,
+            "f1": 0.5454545454545454,
+            "jaccard": 0.375,
+            "tp": 3,
+            "fp": 2,
+            "fn": 3
+          }
+        }
+      }
+    },
+    {
+      "sample": 3,
+      "file": "2002.00125v1-Figure2-1.png",
+      "difficulty": "Hard",
+      "predicted_dot": "digraph {\n  \"beamformed audio\" -> \"DFT\"\n  \"DFT\" -> \"Log\"\n  \"Log\" -> \"FLSTMs\"\n  \"FLSTMs\" -> \"LSTMs\"\n  \"LSTMs\" -> \"Linear\"\n  \"Linear\" -> \"Softmax\"\n  \"Input audio\" -> \"7 channel beamforming\"\n  \"7 channel beamforming\" -> \"DFT 1\"\n  \"DFT 1\" -> \"DFT 2\"\n  \"DFT 2\" -> \"GMV norm.\"\n  \"GMV norm.\" -> \"Spatial filtering\"\n  \"Spatial filtering\" -> \"Complex power\"\n  \"Complex power\" -> \"Linear\"\n  \"Linear\" -> \"MFB\"\n  \"MFB\" -> \"ReLU\"\n  \"ReLU\" -> \"Log\"\n  \"Log\" -> \"LSTMs\"\n  \"LSTMs\" -> \"Linear\"\n  \"Linear\" -> \"Softmax\"\n  \"Softmax\" -> \"Student model\"\n  \"Softmax\" -> \"Teacher model\"\n}",
+      "raw_output": "digraph {\n  \"beamformed audio\" -> \"DFT\"\n  \"DFT\" -> \"Log\"\n  \"Log\" -> \"FLSTMs\"\n  \"FLSTMs\" -> \"LSTMs\"\n  \"LSTMs\" -> \"Linear\"\n  \"Linear\" -> \"Softmax\"\n  \"Input audio\" -> \"7 channel beamforming\"\n  \"7 channel beamforming\" -> \"DFT 1\"\n  \"DFT 1\" -> \"DFT 2\"\n  \"DFT 2\" -> \"GMV norm.\"\n  \"GMV norm.\" -> \"Spatial filtering\"\n  \"Spatial filtering\" -> \"Complex power\"\n  \"Complex power\" -> \"Linear\"\n  \"Linear\" -> \"MFB\"\n  \"MFB\" -> \"ReLU\"\n  \"ReLU\" -> \"Log\"\n  \"Log\" -> \"LSTMs\"\n  \"LSTMs\" -> \"Linear\"\n  \"Linear\" -> \"Softmax\"\n  \"Softmax\" -> \"Student model\"\n  \"Softmax\" -> \"Teacher model\"\n}",
+      "renders": true,
+      "expected_nodes": [
+        "7 channel beamforming",
+        "audio 1",
+        "audio 2",
+        "audio 3",
+        "audio 7",
+        "beamformed audio",
+        "complex power",
+        "cross entropy or smbr",
+        "dft",
+        "dft 1",
+        "dft 2",
+        "flstms",
+        "gmv norm",
+        "input audio",
+        "linear",
+        "log",
+        "lstms",
+        "mfb",
+        "relu",
+        "select top k logits",
+        "softmax",
+        "spatial filtering",
+        "student"
+      ],
+      "expected_edges": [
+        [
+          "7 channel beamforming",
+          "beamformed audio"
+        ],
+        [
+          "audio 1",
+          "dft 1"
+        ],
+        [
+          "audio 2",
+          "dft 2"
+        ],
+        [
+          "audio 3",
+          "7 channel beamforming"
+        ],
+        [
+          "audio 7",
+          "7 channel beamforming"
+        ],
+        [
+          "beamformed audio",
+          "dft"
+        ],
+        [
+          "complex power",
+          "linear"
+        ],
+        [
+          "cross entropy or smbr",
+          "student"
+        ],
+        [
+          "dft",
+          "log"
+        ],
+        [
+          "dft 1",
+          "gmv norm"
+        ],
+        [
+          "dft 2",
+          "gmv norm"
+        ],
+        [
+          "flstms",
+          "lstms"
+        ],
+        [
+          "gmv norm",
+          "spatial filtering"
+        ],
+        [
+          "input audio",
+          "audio 1"
+        ],
+        [
+          "input audio",
+          "audio 2"
+        ],
+        [
+          "input audio",
+          "audio 3"
+        ],
+        [
+          "input audio",
+          "audio 7"
+        ],
+        [
+          "linear",
+          "mfb"
+        ],
+        [
+          "linear",
+          "softmax"
+        ],
+        [
+          "log",
+          "flstms"
+        ],
+        [
+          "log",
+          "lstms"
+        ],
+        [
+          "lstms",
+          "linear"
+        ],
+        [
+          "mfb",
+          "relu"
+        ],
+        [
+          "relu",
+          "log"
+        ],
+        [
+          "select top k logits",
+          "cross entropy or smbr"
+        ],
+        [
+          "softmax",
+          "select top k logits"
+        ],
+        [
+          "spatial filtering",
+          "complex power"
+        ],
+        [
+          "student",
+          "spatial filtering"
+        ]
+      ],
+      "predicted_nodes": [
+        "7 channel beamforming",
+        "beamformed audio",
+        "complex power",
+        "dft",
+        "dft 1",
+        "dft 2",
+        "flstms",
+        "gmv norm",
+        "input audio",
+        "linear",
+        "log",
+        "lstms",
+        "mfb",
+        "relu",
+        "softmax",
+        "spatial filtering",
+        "student model",
+        "teacher model"
+      ],
+      "predicted_edges": [
+        [
+          "7 channel beamforming",
+          "dft 1"
+        ],
+        [
+          "beamformed audio",
+          "dft"
+        ],
+        [
+          "complex power",
+          "linear"
+        ],
+        [
+          "dft",
+          "log"
+        ],
+        [
+          "dft 1",
+          "dft 2"
+        ],
+        [
+          "dft 2",
+          "gmv norm"
+        ],
+        [
+          "flstms",
+          "lstms"
+        ],
+        [
+          "gmv norm",
+          "spatial filtering"
+        ],
+        [
+          "input audio",
+          "7 channel beamforming"
+        ],
+        [
+          "linear",
+          "mfb"
+        ],
+        [
+          "linear",
+          "softmax"
+        ],
+        [
+          "log",
+          "flstms"
+        ],
+        [
+          "log",
+          "lstms"
+        ],
+        [
+          "lstms",
+          "linear"
+        ],
+        [
+          "mfb",
+          "relu"
+        ],
+        [
+          "relu",
+          "log"
+        ],
+        [
+          "softmax",
+          "student model"
+        ],
+        [
+          "softmax",
+          "teacher model"
+        ],
+        [
+          "spatial filtering",
+          "complex power"
+        ]
+      ],
+      "metrics": {
+        "exact": {
+          "node": {
+            "precision": 0.8333333333333334,
+            "recall": 0.625,
+            "f1": 0.7142857142857143,
+            "jaccard": 0.5555555555555556,
+            "tp": 15,
+            "fp": 3,
+            "fn": 9
+          },
+          "edge": {
+            "precision": 0.5789473684210527,
+            "recall": 0.39285714285714285,
+            "f1": 0.46808510638297873,
+            "jaccard": 0.3055555555555556,
+            "tp": 11,
+            "fp": 8,
+            "fn": 17
+          }
+        },
+        "normalized": {
+          "node": {
+            "precision": 0.8888888888888888,
+            "recall": 0.6956521739130435,
+            "f1": 0.7804878048780488,
+            "jaccard": 0.64,
+            "tp": 16,
+            "fp": 2,
+            "fn": 7
+          },
+          "edge": {
+            "precision": 0.7368421052631579,
+            "recall": 0.5,
+            "f1": 0.5957446808510638,
+            "jaccard": 0.42424242424242425,
+            "tp": 14,
+            "fp": 5,
+            "fn": 14
+          }
+        },
+        "fuzzy": {
+          "node": {
+            "precision": 0.8888888888888888,
+            "recall": 0.6956521739130435,
+            "f1": 0.7804878048780488,
+            "jaccard": 0.64,
+            "tp": 16,
+            "fp": 2,
+            "fn": 7
+          },
+          "edge": {
+            "precision": 0.7368421052631579,
+            "recall": 0.5,
+            "f1": 0.5957446808510638,
+            "jaccard": 0.42424242424242425,
+            "tp": 14,
+            "fp": 5,
+            "fn": 14
+          }
+        }
+      }
+    },
+    {
+      "sample": 4,
+      "file": "2002.01144v1-Figure1-1.png",
+      "difficulty": "Medium",
+      "predicted_dot": "digraph {\n  \"HS Input\" -> \"HS PCA\"\n  \"HS PCA\" -> \"HS Input Cube\"\n  \"LiDAR Input\" -> \"LiDAR Image Patch\"\n  \"HS Input Cube\" -> \"HS Feature Learning\"\n  \"LiDAR Image Patch\" -> \"LiDAR Feature Learning\"\n  \"HS Feature Learning\" -> \"HS Fusion Module\"\n  \"LiDAR Feature Learning\" -> \"LiDAR Fusion Module\"\n  \"HS Fusion Module\" -> \"Classifier 1\"\n  \"HS Fusion Module\" -> \"Classifier 2\"\n  \"HS Fusion Module\" -> \"Classifier 3\"\n  \"HS Fusion Module\" -> \"Output Layer\"\n  \"LiDAR Fusion Module\" -> \"Classifier 1\"\n  \"LiDAR Fusion Module\" -> \"Classifier 2\"\n  \"LiDAR Fusion\n  \"HS Fusion Module\" -> \"Classifier 3\"\n  \"HS Fusion Module\" -> \"Output Layer\"\n  \"LiDAR Fusion Module\" -> \"Classifier 1\"\n  \"LiDAR Fusion Module\" -> \"Classifier 2\"\n  \"LiDAR Fusion Module\" -> \"Classifier 3\"\n  \"HS Fusion Module\" -> \"Output Layer\"\n  \"LiDAR Fusion Module\" -> \"Output Layer\"\n}",
+      "raw_output": "digraph {\n  \"HS Input\" -> \"HS PCA\"\n  \"HS PCA\" -> \"HS Input Cube\"\n  \"LiDAR Input\" -> \"LiDAR Image Patch\"\n  \"HS Input Cube\" -> \"HS Feature Learning\"\n  \"LiDAR Image Patch\" -> \"LiDAR Feature Learning\"\n  \"HS Feature Learning\" -> \"HS Fusion Module\"\n  \"LiDAR Feature Learning\" -> \"LiDAR Fusion Module\"\n  \"HS Fusion Module\" -> \"Classifier 1\"\n  \"HS Fusion Module\" -> \"Classifier 2\"\n  \"HS Fusion Module\" -> \"Classifier 3\"\n  \"HS Fusion Module\" -> \"Output Layer\"\n  \"LiDAR Fusion Module\" -> \"Classifier 1\"\n  \"LiDAR Fusion Module\" -> \"Classifier 2\"\n  \"LiDAR Fusion\n  \"HS Fusion Module\" -> \"Classifier 3\"\n  \"HS Fusion Module\" -> \"Output Layer\"\n  \"LiDAR Fusion Module\" -> \"Classifier 1\"\n  \"LiDAR Fusion Module\" -> \"Classifier 2\"\n  \"LiDAR Fusion Module\" -> \"Classifier 3\"\n  \"HS Fusion Module\" -> \"Output Layer\"\n  \"LiDAR Fusion Module\" -> \"Output Layer\"\n}",
+      "renders": false,
+      "expected_nodes": [
+        "d",
+        "f",
+        "hs network feature learning module",
+        "hs network fusion module",
+        "hs network input module",
+        "lidar network feature learning module",
+        "lidar network fusion module",
+        "lidar network input module",
+        "u1",
+        "u2",
+        "u3",
+        "weight sharing"
+      ],
+      "expected_edges": [
+        [
+          "d",
+          "u1"
+        ],
+        [
+          "d",
+          "u2"
+        ],
+        [
+          "d",
+          "u3"
+        ],
+        [
+          "f",
+          "d"
+        ],
+        [
+          "hs network feature learning module",
+          "hs network fusion module"
+        ],
+        [
+          "hs network feature learning module",
+          "weight sharing"
+        ],
+        [
+          "hs network fusion module",
+          "f"
+        ],
+        [
+          "hs network input module",
+          "hs network feature learning module"
+        ],
+        [
+          "lidar network feature learning module",
+          "lidar network fusion module"
+        ],
+        [
+          "lidar network feature learning module",
+          "weight sharing"
+        ],
+        [
+          "lidar network fusion module",
+          "f"
+        ],
+        [
+          "lidar network input module",
+          "lidar network feature learning module"
+        ]
+      ],
+      "predicted_nodes": [
+        "classifier 1",
+        "classifier 2",
+        "classifier 3",
+        "hs feature learning",
+        "hs fusion module",
+        "hs input",
+        "hs input cube",
+        "hs pca",
+        "lidar feature learning",
+        "lidar fusion hs fusion module classifier 3 hs fusion module output layer lidar fusion module classifier 1 lidar fusion module classifier 2 lidar fusion module classifier 3 hs fusion module output layer lidar fusion module output layer",
+        "lidar fusion module",
+        "lidar image patch",
+        "lidar input",
+        "output layer"
+      ],
+      "predicted_edges": [
+        [
+          "hs feature learning",
+          "hs fusion module"
+        ],
+        [
+          "hs fusion module",
+          "classifier 1"
+        ],
+        [
+          "hs fusion module",
+          "classifier 2"
+        ],
+        [
+          "hs fusion module",
+          "classifier 3"
+        ],
+        [
+          "hs fusion module",
+          "output layer"
+        ],
+        [
+          "hs input",
+          "hs pca"
+        ],
+        [
+          "hs input cube",
+          "hs feature learning"
+        ],
+        [
+          "hs pca",
+          "hs input cube"
+        ],
+        [
+          "lidar feature learning",
+          "lidar fusion module"
+        ],
+        [
+          "lidar fusion module",
+          "classifier 1"
+        ],
+        [
+          "lidar fusion module",
+          "classifier 2"
+        ],
+        [
+          "lidar image patch",
+          "lidar feature learning"
+        ],
+        [
+          "lidar input",
+          "lidar image patch"
+        ]
+      ],
+      "metrics": {
+        "exact": {
+          "node": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 14,
+            "fn": 12
+          },
+          "edge": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 13,
+            "fn": 12
+          }
+        },
+        "normalized": {
+          "node": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 14,
+            "fn": 12
+          },
+          "edge": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 13,
+            "fn": 12
+          }
+        },
+        "fuzzy": {
+          "node": {
+            "precision": 0.14285714285714285,
+            "recall": 0.16666666666666666,
+            "f1": 0.15384615384615383,
+            "jaccard": 0.08333333333333333,
+            "tp": 2,
+            "fp": 12,
+            "fn": 10
+          },
+          "edge": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 13,
+            "fn": 12
+          }
+        }
+      }
+    },
+    {
+      "sample": 5,
+      "file": "2002.04034v4-Figure4-1.png",
+      "difficulty": "Medium",
+      "predicted_dot": "digraph {\n  \"Import Video Sample\" -> \"Import Detected Sperms\"\n  \"Import Detected Sperms\" -> \"CSR-DCF Initialization\"\n  \"CSR-DCF Initialization\" -> \"Tracker Update\"\n  \"Tracker Update\" -> \"Tracked Sperms Assigned\"\n  \"Tracked Sperms Assigned\" -> \"Check End of Video\"\n  \"Check End of Video\" -> \"Loop Back to Tracker Update\"\n  \"Check End of Video\" -> \"Initialize Missing Tracks Joiner\"\n  \"Initialize Missing Tracks Joiner\" -> \"Check Number of Sperms in Tracks\"\n  \"Check Number of Sperms in Tracks\" -> \"Remove Tracks\"\n  \"Check Number of Sperms in Tracks\" -> \"Tracking Finished\"\n}",
+      "raw_output": "digraph {\n  \"Import Video Sample\" -> \"Import Detected Sperms\"\n  \"Import Detected Sperms\" -> \"CSR-DCF Initialization\"\n  \"CSR-DCF Initialization\" -> \"Tracker Update\"\n  \"Tracker Update\" -> \"Tracked Sperms Assigned\"\n  \"Tracked Sperms Assigned\" -> \"Check End of Video\"\n  \"Check End of Video\" -> \"Loop Back to Tracker Update\"\n  \"Check End of Video\" -> \"Initialize Missing Tracks Joiner\"\n  \"Initialize Missing Tracks Joiner\" -> \"Check Number of Sperms in Tracks\"\n  \"Check Number of Sperms in Tracks\" -> \"Remove Tracks\"\n  \"Check Number of Sperms in Tracks\" -> \"Tracking Finished\"\n}",
+      "renders": true,
+      "expected_nodes": [
+        "add as a new track",
+        "csr dcf initialization",
+        "detected sperms be assigned",
+        "end of the video",
+        "finished tracking",
+        "import detected sperms in the video frames",
+        "import video sample",
+        "initialize missing tracks joiner",
+        "number of sperms in tracks 9",
+        "remove tracks",
+        "tracked sperms assignment",
+        "tracked sperms be assigned",
+        "update tracker on the next frame"
+      ],
+      "expected_edges": [
+        [
+          "csr dcf initialization",
+          "update tracker on the next frame"
+        ],
+        [
+          "detected sperms be assigned",
+          "add as a new track"
+        ],
+        [
+          "detected sperms be assigned",
+          "end of the video"
+        ],
+        [
+          "end of the video",
+          "initialize missing tracks joiner"
+        ],
+        [
+          "end of the video",
+          "number of sperms in tracks 9"
+        ],
+        [
+          "import detected sperms in the video frames",
+          "csr dcf initialization"
+        ],
+        [
+          "import video sample",
+          "import detected sperms in the video frames"
+        ],
+        [
+          "initialize missing tracks joiner",
+          "end of the video"
+        ],
+        [
+          "number of sperms in tracks 9",
+          "finished tracking"
+        ],
+        [
+          "number of sperms in tracks 9",
+          "remove tracks"
+        ],
+        [
+          "tracked sperms assignment",
+          "tracked sperms be assigned"
+        ],
+        [
+          "tracked sperms be assigned",
+          "detected sperms be assigned"
+        ],
+        [
+          "tracked sperms be assigned",
+          "remove tracks"
+        ],
+        [
+          "update tracker on the next frame",
+          "tracked sperms assignment"
+        ]
+      ],
+      "predicted_nodes": [
+        "check end of video",
+        "check number of sperms in tracks",
+        "csr dcf initialization",
+        "import detected sperms",
+        "import video sample",
+        "initialize missing tracks joiner",
+        "loop back to tracker update",
+        "remove tracks",
+        "tracked sperms assigned",
+        "tracker update",
+        "tracking finished"
+      ],
+      "predicted_edges": [
+        [
+          "check end of video",
+          "initialize missing tracks joiner"
+        ],
+        [
+          "check end of video",
+          "loop back to tracker update"
+        ],
+        [
+          "check number of sperms in tracks",
+          "remove tracks"
+        ],
+        [
+          "check number of sperms in tracks",
+          "tracking finished"
+        ],
+        [
+          "csr dcf initialization",
+          "tracker update"
+        ],
+        [
+          "import detected sperms",
+          "csr dcf initialization"
+        ],
+        [
+          "import video sample",
+          "import detected sperms"
+        ],
+        [
+          "initialize missing tracks joiner",
+          "check number of sperms in tracks"
+        ],
+        [
+          "tracked sperms assigned",
+          "check end of video"
+        ],
+        [
+          "tracker update",
+          "tracked sperms assigned"
+        ]
+      ],
+      "metrics": {
+        "exact": {
+          "node": {
+            "precision": 0.18181818181818182,
+            "recall": 0.14285714285714285,
+            "f1": 0.16,
+            "jaccard": 0.08695652173913043,
+            "tp": 2,
+            "fp": 9,
+            "fn": 12
+          },
+          "edge": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 10,
+            "fn": 14
+          }
+        },
+        "normalized": {
+          "node": {
+            "precision": 0.36363636363636365,
+            "recall": 0.3076923076923077,
+            "f1": 0.33333333333333337,
+            "jaccard": 0.2,
+            "tp": 4,
+            "fp": 7,
+            "fn": 9
+          },
+          "edge": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "jaccard": 0.0,
+            "tp": 0,
+            "fp": 10,
+            "fn": 14
+          }
+        },
+        "fuzzy": {
+          "node": {
+            "precision": 0.5454545454545454,
+            "recall": 0.46153846153846156,
+            "f1": 0.4999999999999999,
+            "jaccard": 0.3333333333333333,
+            "tp": 6,
+            "fp": 5,
+            "fn": 7
+          },
+          "edge": {
+            "precision": 0.1,
+            "recall": 0.07142857142857142,
+            "f1": 0.08333333333333333,
+            "jaccard": 0.043478260869565216,
+            "tp": 1,
+            "fp": 9,
+            "fn": 13
+          }
+        }
+      }
+    }
+  ]
+}
