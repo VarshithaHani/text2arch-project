@@ -207,6 +207,8 @@ def parse_dot(dot, pipe_is_newline=False):
                 continue
             see(node_id)
             label = _label_from_attrs(attrs)
+            if label and pipe_is_newline:
+                label = " ".join(label.replace("|", " ").split())
             if label:
                 labels[node_id] = label
 
@@ -218,6 +220,55 @@ def parse_dot(dot, pipe_is_newline=False):
     if not nodes and not edges:
         raise ValueError("No nodes or edges could be extracted from DOT.")
     return nodes, edges
+
+
+_ARROW_VARIANTS = re.compile(r"\s*(?:-{1,2}>|=>|\u2192|\u27f6|\u2794|\u279c)\s*")
+_KEYWORDS = DEFAULT_WORDS | HEADER_WORDS
+
+
+def _quote(tok):
+    tok = tok.strip().rstrip(";,").strip()
+    if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"':
+        return tok
+    return '"' + tok.replace('"', '\\"') + '"'
+
+
+def repair_dot(dot):
+    """
+    Rebuild model output as clean, renderable DOT.
+      * 'MGGN -> Flow Estimator;'   -> '"MGGN" -> "Flow Estimator"'
+      * '-->' / '=>' / unicode arrows -> '->'
+      * several statements on one line, 'digraph G { A -> B; B -> C }' -> one per line
+      * subgraph/cluster wrappers are flattened (they never matter for scoring)
+    Returns the repaired DOT string (raises ValueError if there is no 'digraph').
+    """
+    if "digraph" not in (dot or "").lower():
+        raise ValueError("Invalid DOT: 'digraph' not found.")
+    lines = ["digraph G {"]
+    for stmt in _split_statements(dot):
+        first = stmt.split()[0].lower()
+        if first in HEADER_WORDS:
+            continue
+        head, attrs = _split_attrs(stmt)
+        if not head:
+            continue
+        suffix = f" [{attrs.strip()}]" if attrs.strip() else ""
+        plain = _QUOTED.sub("", head)
+        if not _QUOTED.search(head):
+            head = _ARROW_VARIANTS.sub(" -> ", head)
+            plain = head
+        if "->" in plain:
+            toks = [t for t in _split_arrow(head) if t.strip().rstrip(";,").strip()]
+            if len(toks) >= 2:
+                lines.append("  " + " -> ".join(_quote(t) for t in toks) + suffix)
+            elif len(toks) == 1:
+                lines.append("  " + _quote(toks[0]))
+        elif "=" in plain or head.lower() in DEFAULT_WORDS:
+            lines.append("  " + head + suffix)
+        else:
+            lines.append("  " + _quote(head) + suffix)
+    lines.append("}")
+    return "\n".join(lines)
 
 
 def extract_ground_truth(ground_truth_dot):
@@ -260,8 +311,6 @@ def _apply_mode(exp_nodes, exp_edges, pred_nodes, pred_edges, mode):
                 mapping[p] = _best_match(p, en, 0.75) or p
         pn = {mapping[p] for p in pn}
         pe = {(mapping.get(a, a), mapping.get(b, b)) for a, b in pe}
-        # edge endpoints that were never declared as nodes
-        pe = {(a, b) for a, b in pe}
     return en, ee, pn, pe
 
 

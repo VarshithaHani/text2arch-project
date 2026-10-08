@@ -1,8 +1,12 @@
 """
 Text2Arch evaluation with a local Ollama model (default: qwen3:8b).
 
+Works with any Ollama chat model; prompt style and thinking switches are chosen
+automatically (qwen3:8b -> "flow" prompt + thinking off, qwen2.5:1.5b -> "small" prompt).
+
 Examples
-    python run_evaluation.py                      # first 5 samples
+    python run_evaluation.py                      # first 5 samples, qwen3:8b
+    python run_evaluation.py --model qwen2.5:1.5b-instruct
     python run_evaluation.py --samples 20
     python run_evaluation.py --all                # all rows of manual.tsv
     python run_evaluation.py --dataset D:\\path\\manual.tsv --prompt strict
@@ -22,7 +26,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-from evaluate import evaluate_prediction, extract_ground_truth
+from evaluate import evaluate_prediction, extract_ground_truth, parse_dot, repair_dot
 from metrics import macro_average, micro_average
 
 # Windows consoles choke on characters like 'ΔH' / 'ŷ' -> never crash on print
@@ -76,7 +80,48 @@ digraph {
   "Encoder" -> "Decoder"
   "Decoder" -> "Output Image"
 }""",
+
+    # Short prompt + one worked example: what 0.5B-3B models follow reliably
+    "small": """Convert the description into Graphviz DOT.
+
+Output format (nothing else - no explanations, no code fences):
+digraph G {
+  "Component A" -> "Component B"
 }
+
+Rules:
+- Every node name is in double quotes and copied from the description.
+- One edge per line: "Source" -> "Target". The arrow follows the data flow.
+- Use only components named in the description. No attributes, no labels, no clusters.
+- If A and B both go into C, write "A" -> "C" and "B" -> "C".
+
+Example
+Description: The Input Image is processed by the Encoder. The Encoder output is passed to the Decoder, which produces the Output Image.
+Output:
+digraph G {
+  "Input Image" -> "Encoder"
+  "Encoder" -> "Decoder"
+  "Decoder" -> "Output Image"
+}""",
+}
+
+SMALL_MODEL = re.compile(r"[:\-_/ ](0\.5|1\.5|1|2|3)b(?![a-z0-9.])", re.I)
+
+
+def resolve_prompt(args):
+    if args.prompt != "auto":
+        return args.prompt
+    return "small" if SMALL_MODEL.search(args.model) else "flow"
+
+
+def thinking_switch(args):
+    """True / False = send think flag, None = model has no thinking mode (send nothing)."""
+    if args.think == "on":
+        return True
+    if args.think == "off":
+        return False
+    name = args.model.lower()
+    return False if ("qwen3" in name or "deepseek-r1" in name) else None
 
 
 # ------------------------------------------------------------------
@@ -136,55 +181,87 @@ def extract_dot(raw):
     if text.count("{") > text.count("}"):
         text += "\n}" * (text.count("{") - text.count("}"))
         notes.append("added missing closing brace (output was probably cut off)")
-    return text.strip(), notes
+
+    # quote names with spaces, fix arrows, one statement per line
+    fixed = repair_dot(text.strip())
+    if fixed.split() != text.split():
+        notes.append("normalised DOT (quoted names / arrows / layout)")
+    return fixed, notes
+
+
+def chat(payload, args):
+    """One Ollama /api/chat call. Drops the 'think' flag if the model rejects it."""
+    for _ in range(2):
+        try:
+            return http_json(f"{OLLAMA_HOST}/api/chat", payload, timeout=args.timeout)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")[:300]
+            if e.code == 400 and "think" in body.lower() and "think" in payload:
+                payload.pop("think")          # e.g. qwen2.5 does not know the flag
+                continue
+            raise RuntimeError(f"Ollama HTTP {e.code}: {body}")
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"Could not reach Ollama at {OLLAMA_HOST}: {e}")
+    raise RuntimeError("Ollama request failed")
 
 
 def generate_dot(description, args):
-    system_prompt = PROMPTS[args.prompt]
-    user_msg = (
+    system_prompt = PROMPTS[resolve_prompt(args)]
+    think = thinking_switch(args)
+    base_msg = (
         "Architecture description:\n\n"
         f"{clean_description(description)}\n\n"
         "Output only the DOT code."
     )
-    if args.no_think:
-        user_msg += " /no_think"      # Qwen3 soft switch (harmless for other models)
+    if think is False and "qwen3" in args.model.lower():
+        base_msg += " /no_think"      # Qwen3 soft switch; never sent to other models
 
-    payload = {
-        "model": args.model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_msg},
-        ],
-        "stream": False,
-        "options": {"temperature": 0, "num_predict": args.max_tokens, "num_ctx": args.num_ctx},
-    }
-    if args.no_think:
-        payload["think"] = False      # Ollama >= 0.9: keeps reasoning out of the answer
+    last_error = None
+    for attempt in range(args.retries + 1):
+        user_msg = base_msg
+        if attempt:                   # retry: slightly warmer + explicit reminder
+            user_msg += ('\n\nYour previous answer was not valid. Reply with ONLY a DOT graph that '
+                         'starts with "digraph G {" and has one "A" -> "B" edge per line.')
+        payload = {
+            "model": args.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_msg},
+            ],
+            "stream": False,
+            "options": {"temperature": 0.2 if attempt else 0, "seed": 0,
+                        "num_predict": args.max_tokens, "num_ctx": args.num_ctx},
+        }
+        if think is not None:
+            payload["think"] = think
 
-    try:
-        result = http_json(f"{OLLAMA_HOST}/api/chat", payload, timeout=args.timeout)
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")[:300]
-        raise RuntimeError(f"Ollama HTTP {e.code}: {body}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Could not reach Ollama at {OLLAMA_HOST}: {e}")
-
-    message = result.get("message", {})
-    content = (message.get("content") or "").strip()
-    meta = {
-        "done_reason": result.get("done_reason"),
-        "eval_count": result.get("eval_count"),
-        "had_thinking_field": bool(message.get("thinking")),
-    }
-    if not content:
-        why = ("the model spent all tokens on 'thinking' (use --no-think or raise --max-tokens)"
-               if meta["had_thinking_field"] else "empty response")
-        raise ValueError(f"Ollama returned empty content: {why}.")
-
-    dot, notes = extract_dot(content)
-    if meta["done_reason"] == "length":
-        notes.append("hit the token limit - raise --max-tokens")
-    return content, dot, notes, meta
+        result = chat(payload, args)
+        message = result.get("message", {})
+        content = (message.get("content") or "").strip()
+        meta = {
+            "done_reason": result.get("done_reason"),
+            "eval_count": result.get("eval_count"),
+            "had_thinking_field": bool(message.get("thinking")),
+            "attempts": attempt + 1,
+        }
+        try:
+            if not content:
+                why = ("the model spent all tokens on 'thinking' (use --think off or raise --max-tokens)"
+                       if meta["had_thinking_field"] else "empty response")
+                raise ValueError(f"Ollama returned empty content: {why}.")
+            dot, notes = extract_dot(content)
+            _, edges = parse_dot(dot)
+            if not edges:
+                raise ValueError("generated DOT contains no edges.")
+        except ValueError as e:
+            last_error = e
+            continue
+        if attempt:
+            notes.append(f"needed {attempt + 1} attempts")
+        if meta["done_reason"] == "length":
+            notes.append("hit the token limit - raise --max-tokens")
+        return content, dot, notes, meta
+    raise ValueError(f"{last_error} (after {args.retries + 1} attempts)")
 
 
 def dot_renders(dot):
@@ -293,13 +370,14 @@ def main():
     ap.add_argument("--samples", type=int, default=5, help="how many rows to evaluate")
     ap.add_argument("--start", type=int, default=1, help="first row (1-based)")
     ap.add_argument("--all", action="store_true", help="evaluate every row")
-    ap.add_argument("--prompt", choices=sorted(PROMPTS), default="flow")
+    ap.add_argument("--prompt", choices=["auto"] + sorted(PROMPTS), default="auto",
+                    help="auto = 'small' for <=3B models, 'flow' otherwise")
     ap.add_argument("--max-tokens", type=int, default=1500)
     ap.add_argument("--num-ctx", type=int, default=8192)
     ap.add_argument("--timeout", type=int, default=900)
-    ap.add_argument("--think", dest="no_think", action="store_false",
-                    help="allow Qwen3 thinking mode (slower; needs a larger --max-tokens)")
-    ap.set_defaults(no_think=True)
+    ap.add_argument("--think", nargs="?", const="on", choices=["auto", "on", "off"], default="auto",
+                    help="auto = off for qwen3/deepseek-r1, not sent to other models")
+    ap.add_argument("--retries", type=int, default=1, help="extra attempts if the output is unusable")
     args = ap.parse_args()
 
     print("=" * 60)
@@ -327,7 +405,8 @@ def main():
         print(f"Install with:  ollama pull {args.model}")
         return 1
 
-    print(f"Model   : {args.model}   (think={'off' if args.no_think else 'on'}, prompt={args.prompt})")
+    sw = thinking_switch(args)
+    print(f"Model   : {args.model}   (think={'n/a' if sw is None else 'on' if sw else 'off'}, prompt={resolve_prompt(args)})")
     print(f"Dataset : {dataset}")
 
     with open(dataset, "r", encoding="utf-8-sig", newline="") as f:
