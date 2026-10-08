@@ -1,6 +1,7 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import json
 import re
+import torch
 
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
@@ -14,153 +15,55 @@ model = AutoModelForCausalLM.from_pretrained(
     dtype="auto"
 )
 
+model.eval()
+
 print("Qwen model loaded successfully!")
 
 
-SYSTEM_PROMPT = """
-You are a software architecture extraction model.
+# ---------------------------------------------------------
+# SHORT, DIRECT PROMPT
+# ---------------------------------------------------------
 
-Your task is to convert a natural language software architecture
-description into a structured architecture graph.
+SYSTEM_PROMPT = """You extract software architecture from text.
 
-Return ONLY valid JSON.
-
-The JSON must have exactly this structure:
+Return ONLY valid JSON in exactly this format:
 
 {
   "nodes": [
-    {
-      "id": "unique_id",
-      "label": "Human Readable Component Name"
-    }
+    {"id": "unique_id", "label": "Component Name"}
   ],
   "edges": [
-    {
-      "source": "node_id",
-      "target": "node_id"
-    }
+    {"source": "node_id", "target": "node_id"}
   ]
 }
 
-NODE EXTRACTION RULES:
-
-1. Create a node for every distinct software or system component
-   explicitly mentioned in the description.
-
-2. Components may include:
-   - users
-   - customers
-   - browsers
-   - frontend applications
-   - mobile applications
-   - backend services
-   - APIs
-   - servers
-   - databases
-   - caches
-   - message queues
-   - authentication services
-   - payment services
-   - external services
-   - workers
-   - load balancers
-   - API gateways
-
-3. Do NOT create components that are not explicitly mentioned.
-
-4. Do NOT create a separate node for an action, request, operation,
-   protocol, or data item unless it is explicitly described as a
-   component.
-
-5. If the same component is mentioned multiple times, create only
-   one node for it.
-
-EDGE EXTRACTION RULES:
-
-6. Create an edge only when the description explicitly states that
-   one component communicates with, sends requests to, calls,
-   connects to, accesses, uses, stores data in, retrieves data from,
-   forwards requests to, or otherwise directly interacts with another
-   component.
-
-7. Preserve the direction of the relationship.
-
-8. Examples:
-
-   "Frontend communicates with Backend"
-   means:
-   Frontend -> Backend
-
-   "Backend connects to MySQL"
-   means:
-   Backend -> MySQL
-
-   "Backend stores data in Database"
-   means:
-   Backend -> Database
-
-   "API retrieves information from Database"
-   means:
-   API -> Database
-
-   "Load balancer forwards requests to Server"
-   means:
-   Load_Balancer -> Server
-
-9. NEVER infer a relationship merely because two components appear
-   in the same description.
-
-10. NEVER create indirect relationships.
-    If A connects to B and B connects to C, do NOT automatically
-    create A -> C.
-
-11. Do NOT create duplicate edges.
-
-12. Do NOT reverse the direction of an explicitly stated relationship.
-
-IDENTIFIER RULES:
-
-13. Every node must have a unique ID.
-
-14. IDs must contain only lowercase letters, numbers, and underscores.
-
-15. Convert component names into simple IDs.
-
-   Examples:
-
-   "React Frontend" -> "react_frontend"
-   "Spring Boot Backend" -> "spring_boot_backend"
-   "MySQL Database" -> "mysql_database"
-   "API Gateway" -> "api_gateway"
-
-16. Every edge source and target must exactly match an existing
-    node ID.
-
-17. NEVER use "null" as a node ID or edge endpoint.
-
-OUTPUT RULES:
-
-18. Return ONLY JSON.
-
-19. Do NOT return Markdown code fences.
-
-20. Do NOT return explanations.
-
-21. Do NOT return comments.
-
-22. The final output must be valid JSON that can be parsed directly
-    by a Python JSON parser.
+Rules:
+- Create nodes only for components explicitly mentioned.
+- Components include frontend, backend, API, database, cache, queue,
+  server, user, external service, worker, gateway, etc.
+- Do not invent components.
+- Do not create nodes for actions, protocols, or data unless explicitly
+  described as components.
+- Create an edge only when the text explicitly says two components
+  communicate, connect, call, access, use, send to, store in, retrieve
+  from, or forward to each other.
+- Preserve relationship direction.
+- Do not infer indirect relationships.
+- Do not create duplicate nodes or edges.
+- Node IDs must use lowercase letters, numbers, and underscores only.
+- Every edge endpoint must exactly match a node ID.
+- Never use null.
+- Return JSON only. No markdown, explanation, or comments.
 """
 
-def extract_json(text: str):
-    """
-    Extract and parse the JSON object from the model response.
-    Handles Markdown fences and extra text around the JSON.
-    """
 
+# ---------------------------------------------------------
+# JSON EXTRACTION
+# ---------------------------------------------------------
+
+def extract_json(text: str):
     text = text.strip()
 
-    # Remove Markdown code fences
     text = re.sub(
         r"```json\s*",
         "",
@@ -172,23 +75,21 @@ def extract_json(text: str):
         r"```\s*",
         "",
         text
-    )
+    ).strip()
 
-    text = text.strip()
-
-    # First attempt: parse the entire response
+    # Direct JSON
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Second attempt: find the JSON object inside extra text
+    # Find JSON object inside extra text
     start = text.find("{")
 
     if start == -1:
         return None
 
-    # Try possible closing braces from the end
+    # Try closing braces from the end
     for end in range(len(text) - 1, start, -1):
 
         if text[end] != "}":
@@ -204,10 +105,11 @@ def extract_json(text: str):
     return None
 
 
+# ---------------------------------------------------------
+# CLEAN / VALIDATE ARCHITECTURE
+# ---------------------------------------------------------
+
 def clean_architecture(data):
-    """
-    Validate and clean the model-generated architecture.
-    """
 
     if not isinstance(data, dict):
         return {
@@ -228,7 +130,7 @@ def clean_architecture(data):
     node_ids = set()
 
     # -------------------------
-    # Clean nodes
+    # Nodes
     # -------------------------
 
     for node in raw_nodes:
@@ -236,8 +138,13 @@ def clean_architecture(data):
         if not isinstance(node, dict):
             continue
 
-        node_id = str(node.get("id", "")).strip()
-        label = str(node.get("label", "")).strip()
+        node_id = str(
+            node.get("id", "")
+        ).strip()
+
+        label = str(
+            node.get("label", "")
+        ).strip()
 
         if not node_id or not label:
             continue
@@ -255,7 +162,7 @@ def clean_architecture(data):
             r"_+",
             "_",
             node_id
-        ).strip("_")
+        ).strip("_").lower()
 
         if not node_id:
             continue
@@ -275,7 +182,7 @@ def clean_architecture(data):
         node_ids.add(node_id)
 
     # -------------------------
-    # Clean edges
+    # Edges
     # -------------------------
 
     edges = []
@@ -286,16 +193,27 @@ def clean_architecture(data):
         if not isinstance(edge, dict):
             continue
 
-        source = str(edge.get("source", "")).strip()
-        target = str(edge.get("target", "")).strip()
+        source = str(
+            edge.get("source", "")
+        ).strip()
+
+        target = str(
+            edge.get("target", "")
+        ).strip()
 
         if not source or not target:
             continue
 
-        if source.lower() == "null" or target.lower() == "null":
+        if source.lower() == "null":
             continue
 
-        if source not in node_ids or target not in node_ids:
+        if target.lower() == "null":
+            continue
+
+        if source not in node_ids:
+            continue
+
+        if target not in node_ids:
             continue
 
         edge_key = (source, target)
@@ -316,10 +234,11 @@ def clean_architecture(data):
     }
 
 
+# ---------------------------------------------------------
+# JSON -> DOT
+# ---------------------------------------------------------
+
 def architecture_to_dot(data):
-    """
-    Convert the cleaned architecture JSON into Graphviz DOT.
-    """
 
     lines = [
         "digraph Architecture {",
@@ -352,10 +271,13 @@ def architecture_to_dot(data):
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------
+# GENERATE ARCHITECTURE
+# ---------------------------------------------------------
+
 def generate_architecture(description: str):
-    """
-    Generate and return the cleaned structured architecture.
-    """
+
+    description = description.strip()
 
     messages = [
         {
@@ -364,15 +286,11 @@ def generate_architecture(description: str):
         },
         {
             "role": "user",
-            "content": f"""
-Extract the software architecture from this description.
-
-Architecture description:
-
-{description}
-
-Return only the required JSON.
-"""
+            "content": (
+                "Extract the architecture from this description. "
+                "Return only JSON.\n\n"
+                + description
+            )
         }
     ]
 
@@ -387,14 +305,21 @@ Return only the required JSON.
         return_tensors="pt"
     )
 
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=400,
-        do_sample=False,
-        num_beams=1
-    )
+    # No gradient calculation during inference
+    with torch.inference_mode():
 
-    generated = outputs[0][inputs.input_ids.shape[1]:]
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=150,
+            do_sample=False,
+            num_beams=1,
+            use_cache=True,
+            pad_token_id=tokenizer.eos_token_id
+        )
+
+    generated = outputs[0][
+        inputs.input_ids.shape[1]:
+    ]
 
     answer = tokenizer.decode(
         generated,
@@ -407,7 +332,10 @@ Return only the required JSON.
     architecture = extract_json(answer)
 
     if architecture is None:
-        print("Could not parse Qwen output as JSON.")
+
+        print(
+            "Could not parse Qwen output as JSON."
+        )
 
         return {
             "nodes": [],
@@ -419,6 +347,7 @@ Return only the required JSON.
     )
 
     print("\nCleaned architecture:")
+
     print(
         json.dumps(
             cleaned_architecture,
@@ -429,13 +358,11 @@ Return only the required JSON.
     return cleaned_architecture
 
 
-def generate_dot(description: str) -> str:
-    """
-    Generate DOT from the structured architecture.
+# ---------------------------------------------------------
+# COMPATIBILITY FUNCTION
+# ---------------------------------------------------------
 
-    This function is kept so the existing FastAPI
-    endpoint continues to work.
-    """
+def generate_dot(description: str) -> str:
 
     architecture = generate_architecture(
         description
