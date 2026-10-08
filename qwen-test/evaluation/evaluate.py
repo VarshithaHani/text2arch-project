@@ -4,21 +4,6 @@ from metrics import calculate_metrics
 
 
 # ============================================================
-# DOT ID
-# Supports:
-#   WebServer
-#   web_server
-#   0
-#   "Web Server"
-# ============================================================
-
-DOT_ID = (
-    r'(?:"((?:\\.|[^"])*)"|'
-    r'([A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?))'
-)
-
-
-# ============================================================
 # Graphviz keywords that must NOT become nodes
 # ============================================================
 
@@ -33,236 +18,191 @@ GRAPHVIZ_KEYWORDS = {
 
 
 # ============================================================
-# Convert regex match into node ID
+# Cleaning helpers
 # ============================================================
 
-def get_dot_id(match):
+def strip_wrappers(dot):
     """
-    Return the actual node ID from a regex match.
-    """
-
-    quoted_id = match.group(1)
-    unquoted_id = match.group(2)
-
-    if quoted_id is not None:
-        return quoted_id.replace('\\"', '"')
-
-    return unquoted_id
-
-
-# ============================================================
-# Extract node declarations and labels
-# ============================================================
-
-def extract_node_map(dot):
-    """
-    Extract node IDs and their labels.
-
-    Example:
-
-        0 [label="Frontend"];
-        1 [label="Backend"];
-
-    becomes:
-
-        {
-            "0": "Frontend",
-            "1": "Backend"
-        }
-
-    If a node has no label, its ID is used.
+    Remove Markdown fences and comments from DOT text.
     """
 
-    node_map = {}
+    dot = dot.strip()
 
-    # --------------------------------------------------------
-    # Node declaration pattern
-    #
-    # We require the node declaration to start after:
-    #   beginning of file
-    #   {
-    #   ;
-    #   newline
-    #
-    # This prevents attributes such as:
-    #   label="Frontend"
-    #
-    # from being interpreted as nodes.
-    # --------------------------------------------------------
-
-    node_pattern = re.compile(
-        rf'(?:^|[{{;\n])\s*'
-        rf'(?P<node>{DOT_ID})'
-        rf'\s*'
-        rf'(?:\[(?P<attributes>[^\]]*)\])?'
-        rf'\s*;',
-        re.MULTILINE | re.DOTALL
+    # ```dot / ``` fence lines
+    dot = re.sub(
+        r"^```[A-Za-z]*\s*$",
+        "",
+        dot,
+        flags=re.MULTILINE
     )
 
-    for match in node_pattern.finditer(dot):
+    # /* block comments */
+    dot = re.sub(
+        r"/\*.*?\*/",
+        "",
+        dot,
+        flags=re.DOTALL
+    )
 
-        node_id_match = match.group("node")
+    # // and # comment lines
+    dot = re.sub(
+        r"^\s*(//|#).*$",
+        "",
+        dot,
+        flags=re.MULTILINE
+    )
 
-        node_id = get_dot_id(node_id_match)
-
-        if node_id is None:
-            continue
-
-        if node_id in GRAPHVIZ_KEYWORDS:
-            continue
-
-        attributes = match.group("attributes") or ""
-
-        # ----------------------------------------------------
-        # Look for label="..."
-        # ----------------------------------------------------
-
-        label_match = re.search(
-            r'label\s*=\s*"((?:\\.|[^"])*)"',
-            attributes,
-            re.DOTALL
-        )
-
-        if label_match:
-
-            label = label_match.group(1)
-
-            label = label.replace(
-                '\\"',
-                '"'
-            )
-
-            node_map[node_id] = label.strip()
-
-        else:
-
-            # No label → use node ID
-            node_map[node_id] = node_id.strip()
-
-    return node_map
+    return dot.strip()
 
 
-# ============================================================
-# Extract directed edges
-# ============================================================
-
-def extract_edges(dot, node_map=None):
+def split_top_level(text, delimiters):
     """
-    Extract directed edges from DOT.
-
-    Example:
-
-        frontend -> backend;
-
-    becomes:
-
-        ("frontend", "backend")
-
-    If node_map is supplied, numeric/technical IDs are
-    converted to their human-readable labels.
+    Split text on any delimiter, but ONLY when the delimiter
+    is outside "quotes" and outside [ attribute lists ].
     """
 
-    edges = set()
+    parts = []
+    current = []
+    in_quote = False
+    depth = 0
+    i = 0
 
-    edge_pattern = re.compile(
-        rf'{DOT_ID}'
-        rf'\s*->\s*'
-        rf'{DOT_ID}',
+    while i < len(text):
+
+        ch = text[i]
+
+        if in_quote:
+
+            current.append(ch)
+
+            if ch == "\\" and i + 1 < len(text):
+                current.append(text[i + 1])
+                i += 2
+                continue
+
+            if ch == '"':
+                in_quote = False
+
+            i += 1
+            continue
+
+        if ch == '"':
+            in_quote = True
+            current.append(ch)
+            i += 1
+            continue
+
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth = max(0, depth - 1)
+
+        if depth == 0:
+
+            matched = None
+
+            for delimiter in delimiters:
+                if text.startswith(delimiter, i):
+                    matched = delimiter
+                    break
+
+            if matched is not None:
+                parts.append("".join(current))
+                current = []
+                i += len(matched)
+                continue
+
+        current.append(ch)
+        i += 1
+
+    parts.append("".join(current))
+
+    return parts
+
+
+def find_attribute_start(text):
+    """
+    Index of the first '[' that is outside quotes, or -1.
+    """
+
+    in_quote = False
+    i = 0
+
+    while i < len(text):
+
+        ch = text[i]
+
+        if in_quote:
+
+            if ch == "\\":
+                i += 2
+                continue
+
+            if ch == '"':
+                in_quote = False
+
+        elif ch == '"':
+            in_quote = True
+
+        elif ch == "[":
+            return i
+
+        i += 1
+
+    return -1
+
+
+def clean_id(raw):
+    """
+    Strip whitespace and surrounding quotes from a DOT ID.
+    Works for:  WebServer   "Web Server"   Flow Estimator
+    """
+
+    raw = raw.strip()
+
+    if len(raw) >= 2 and raw[0] == '"' and raw[-1] == '"':
+        raw = raw[1:-1].replace('\\"', '"')
+
+    return raw.strip()
+
+
+def get_label(attributes):
+    """
+    Read label=... from an attribute string, or return None.
+    """
+
+    quoted = re.search(
+        r'(?<![A-Za-z_])label\s*=\s*"((?:\\.|[^"])*)"',
+        attributes,
         re.DOTALL
     )
 
-    for match in edge_pattern.finditer(dot):
+    if quoted:
+        return quoted.group(1).replace('\\"', '"').strip()
 
-        source = get_dot_id(
-            match
-        )
+    unquoted = re.search(
+        r'(?<![A-Za-z_])label\s*=\s*([^\s,\]]+)',
+        attributes
+    )
 
-        target = get_dot_id(
-            match
-        )
+    if unquoted:
+        return unquoted.group(1).strip()
 
-        if source is None or target is None:
-            continue
-
-        if node_map is not None:
-
-            source = node_map.get(
-                source,
-                source
-            )
-
-            target = node_map.get(
-                target,
-                target
-            )
-
-        source = source.strip()
-        target = target.strip()
-
-        if source and target:
-
-            edges.add(
-                (
-                    source,
-                    target
-                )
-            )
-
-    return edges
+    return None
 
 
-# ============================================================
-# Extract nodes
-# ============================================================
-
-def extract_nodes(
-    dot,
-    edges=None,
-    node_map=None
-):
+def normalize(name):
     """
-    Extract nodes from a DOT graph.
-
-    Nodes are obtained from:
-    1. Explicit node declarations
-    2. Nodes appearing in edges
+    Make names comparable between ground truth and prediction:
+    lowercase, underscores/newlines -> spaces, collapse whitespace.
     """
 
-    nodes = set()
+    name = name.replace("\\n", " ").replace("\\l", " ")
+    name = name.replace("\\r", " ")
+    name = name.replace("_", " ")
+    name = name.lower()
 
-    if node_map is None:
-        node_map = extract_node_map(dot)
-
-    # --------------------------------------------------------
-    # Explicitly declared nodes
-    # --------------------------------------------------------
-
-    for node in node_map.values():
-
-        node = node.strip()
-
-        if node and node not in GRAPHVIZ_KEYWORDS:
-
-            nodes.add(node)
-
-    # --------------------------------------------------------
-    # Nodes appearing in edges
-    # --------------------------------------------------------
-
-    if edges:
-
-        for source, target in edges:
-
-            source = source.strip()
-            target = target.strip()
-
-            if source:
-                nodes.add(source)
-
-            if target:
-                nodes.add(target)
-
-    return nodes
+    return " ".join(name.split())
 
 
 # ============================================================
@@ -273,82 +213,132 @@ def parse_dot(dot):
     """
     Parse a DOT graph and return:
 
-        nodes
-        edges
+        nodes  (set of normalized labels)
+        edges  (set of (source_label, target_label))
 
-    The SAME function is used for:
-        - ground truth DOT
-        - predicted DOT
+    The SAME function is used for ground truth and prediction.
     """
 
-    # --------------------------------------------------------
-    # Validate input
-    # --------------------------------------------------------
-
     if not isinstance(dot, str):
+        raise ValueError("DOT output is not a string.")
 
-        raise ValueError(
-            "DOT output is not a string."
-        )
-
-    dot = dot.strip()
+    dot = strip_wrappers(dot)
 
     if not dot:
+        raise ValueError("DOT output is empty.")
 
-        raise ValueError(
-            "DOT output is empty."
-        )
-
-    # --------------------------------------------------------
-    # Validate directed Graphviz graph
-    # --------------------------------------------------------
-
-    if not re.search(
-        r'\bdigraph\b',
-        dot,
-        re.IGNORECASE
-    ):
-
+    if not re.search(r"\bdigraph\b", dot, re.IGNORECASE):
         raise ValueError(
             "Output is not a valid directed Graphviz DOT graph."
         )
 
-    # --------------------------------------------------------
-    # Extract node declarations
-    # --------------------------------------------------------
+    start = dot.find("{")
 
-    node_map = extract_node_map(
-        dot
-    )
+    if start == -1:
+        raise ValueError("DOT graph has no opening '{'.")
 
-    # --------------------------------------------------------
-    # Extract edges
-    # --------------------------------------------------------
+    end = dot.rfind("}")
 
-    edges = extract_edges(
-        dot,
-        node_map
-    )
+    if end > start:
+        body = dot[start + 1:end]
+    else:
+        body = dot[start + 1:]
 
-    # --------------------------------------------------------
-    # Extract nodes
-    # --------------------------------------------------------
+    statements = split_top_level(body, [";", "\n", "{", "}"])
 
-    nodes = extract_nodes(
-        dot,
-        edges,
-        node_map
-    )
+    node_map = {}       # id -> label
+    raw_edges = []      # (source_id, target_id)
 
-    # --------------------------------------------------------
-    # Make sure the graph actually contains something
-    # --------------------------------------------------------
+    for statement in statements:
+
+        statement = statement.strip()
+
+        if not statement:
+            continue
+
+        bracket = find_attribute_start(statement)
+
+        if bracket == -1:
+            head = statement
+            attributes = ""
+        else:
+            head = statement[:bracket].strip()
+            attributes = statement[bracket:]
+
+        if not head:
+            continue
+
+        # Skip keyword statements: node [...], edge [...], subgraph x
+        if head.lower() in GRAPHVIZ_KEYWORDS:
+            continue
+
+        if head.split()[0].lower() == "subgraph":
+            continue
+
+        # Skip graph attributes such as rankdir=LR
+        if bracket == -1 and re.match(
+            r"^[A-Za-z_][A-Za-z0-9_]*\s*=", head
+        ):
+            continue
+
+        # ------------------------------------------------
+        # Edge statement (supports chains: a -> b -> c)
+        # ------------------------------------------------
+
+        parts = split_top_level(head, ["->"])
+
+        if len(parts) > 1:
+
+            ids = [clean_id(part) for part in parts]
+
+            for source, target in zip(ids, ids[1:]):
+                if source and target:
+                    raw_edges.append((source, target))
+
+            continue
+
+        # ------------------------------------------------
+        # Node statement
+        # ------------------------------------------------
+
+        node_id = clean_id(head)
+
+        if not node_id or node_id.lower() in GRAPHVIZ_KEYWORDS:
+            continue
+
+        label = get_label(attributes)
+
+        if label:
+            node_map[node_id] = label
+        elif node_id not in node_map:
+            node_map[node_id] = node_id
+
+    # ----------------------------------------------------
+    # Convert IDs to labels
+    # ----------------------------------------------------
+
+    edges = set()
+
+    for source, target in raw_edges:
+
+        source_label = normalize(node_map.get(source, source))
+        target_label = normalize(node_map.get(target, target))
+
+        if source_label and target_label:
+            edges.add((source_label, target_label))
+
+    nodes = {
+        normalize(label) for label in node_map.values()
+    }
+
+    for source, target in edges:
+        nodes.add(source)
+        nodes.add(target)
+
+    nodes.discard("")
 
     if not nodes and not edges:
-
-        raise ValueError(
-            "DOT graph contains no nodes or edges."
-        )
+        raise ValueError("DOT graph contains no nodes or edges.")
 
     return nodes, edges
 
@@ -359,37 +349,11 @@ def parse_dot(dot):
 
 def extract_ground_truth(ground_truth_dot):
     """
-    Extract expected nodes and expected edges from the
-    dataset's Dot code.
-
-    Example dataset DOT:
-
-        digraph {
-            0 [label="Frontend"];
-            1 [label="Backend"];
-            2 [label="Database"];
-
-            0 -> 1;
-            1 -> 2;
-        }
-
-    Returns:
-
-        nodes = {
-            "Frontend",
-            "Backend",
-            "Database"
-        }
-
-        edges = {
-            ("Frontend", "Backend"),
-            ("Backend", "Database")
-        }
+    Expected nodes and edges from the dataset's Dot code,
+    using human-readable labels instead of numeric IDs.
     """
 
-    return parse_dot(
-        ground_truth_dot
-    )
+    return parse_dot(ground_truth_dot)
 
 
 # ============================================================
@@ -401,53 +365,23 @@ def evaluate_prediction(
     expected_edges,
     predicted_dot
 ):
-    """
-    Compare one predicted DOT graph against the
-    ground-truth nodes and edges.
-    """
 
-    # --------------------------------------------------------
-    # Parse prediction using the SAME parser
-    # --------------------------------------------------------
-
-    predicted_nodes, predicted_edges = parse_dot(
-        predicted_dot
-    )
-
-    # --------------------------------------------------------
-    # Node metrics
-    # --------------------------------------------------------
+    predicted_nodes, predicted_edges = parse_dot(predicted_dot)
 
     node_metrics = calculate_metrics(
         expected_nodes,
         predicted_nodes
     )
 
-    # --------------------------------------------------------
-    # Edge metrics
-    # --------------------------------------------------------
-
     edge_metrics = calculate_metrics(
         expected_edges,
         predicted_edges
     )
 
-    # --------------------------------------------------------
-    # Return everything
-    # --------------------------------------------------------
-
     return {
         "valid": True,
-
-        "predicted_nodes":
-            predicted_nodes,
-
-        "predicted_edges":
-            predicted_edges,
-
-        "node_metrics":
-            node_metrics,
-
-        "edge_metrics":
-            edge_metrics
+        "predicted_nodes": predicted_nodes,
+        "predicted_edges": predicted_edges,
+        "node_metrics": node_metrics,
+        "edge_metrics": edge_metrics
     }

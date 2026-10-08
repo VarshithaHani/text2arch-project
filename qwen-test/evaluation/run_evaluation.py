@@ -1,5 +1,6 @@
 import csv
 import torch
+from pathlib import Path
 
 from transformers import (
     AutoTokenizer,
@@ -26,7 +27,12 @@ MODEL_NAME = input(
 # DATASET
 # ============================================================
 
-DATASET_PATH = "data/manual.tsv"
+# Works from any launch directory.
+# Assumes this file is in qwen-test/evaluation/
+# and data is in qwen-test/data/
+DATASET_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "manual.tsv"
+)
 
 # Keep testing limited to 5 samples
 MAX_SAMPLES = 5
@@ -123,7 +129,7 @@ Output only DOT code.
 
         outputs = model.generate(
             **inputs,
-            max_new_tokens=400,
+            max_new_tokens=150,
             do_sample=False,
             num_beams=1
         )
@@ -269,6 +275,20 @@ def main():
                 ground_truth_dot = row[
                     "Dot code"
                 ]
+
+                # ------------------------------------------------
+                # Temporary debugging:
+                # show the actual ground-truth DOT
+                # ------------------------------------------------
+
+                print(
+                    "\n===== RAW GROUND-TRUTH DOT "
+                    "(first 400 chars) ====="
+                )
+
+                print(
+                    ground_truth_dot[:400]
+                )
 
                 # ------------------------------------------------
                 # 1. Generate prediction

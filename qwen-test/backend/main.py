@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from model import generate_dot
+from model import generate_architecture, architecture_to_dot
 
 
 app = FastAPI(
@@ -32,9 +32,18 @@ def root():
 
 
 @app.post("/generate")
-def generate_architecture(request: ArchitectureRequest):
-    dot = generate_dot(request.description)
+def generate_architecture_endpoint(
+    request: ArchitectureRequest
+):
+    architecture = generate_architecture(
+        request.description
+    )
+
+    dot = architecture_to_dot(
+        architecture
+    )
 
     return {
+        "architecture": architecture,
         "dot": dot
     }
