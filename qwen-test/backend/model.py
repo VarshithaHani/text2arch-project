@@ -1,23 +1,15 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
+
 import json
 import re
-import torch
+import os
+import urllib.request
+import urllib.error
 
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+OLLAMA_URL = "http://localhost:11434/api/chat"
 
-MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+print(f"Using Ollama model: {MODEL_NAME}")
 
-print("Loading tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-print("Loading Qwen model...")
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    dtype="auto"
-)
-
-model.eval()
-
-print("Qwen model loaded successfully!")
 
 
 # ---------------------------------------------------------
@@ -276,86 +268,78 @@ def architecture_to_dot(data):
 # ---------------------------------------------------------
 
 def generate_architecture(description: str):
-
     description = description.strip()
 
-    messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT
-        },
-        {
-            "role": "user",
-            "content": (
-                "Extract the architecture from this description. "
-                "Return only JSON.\n\n"
-                + description
-            )
+    if not description:
+        return {"nodes": [], "edges": []}
+
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    "Extract the architecture from this description. "
+                    "Return only JSON.\n\n" + description
+                )
+            }
+        ],
+        "stream": False,
+        "think": False,
+        "options": {
+            "temperature": 0,
+            "num_predict": 512
         }
-    ]
+    }
 
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-
-    inputs = tokenizer(
-        [text],
-        return_tensors="pt"
-    )
-
-    # No gradient calculation during inference
-    with torch.inference_mode():
-
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=150,
-            do_sample=False,
-            num_beams=1,
-            use_cache=True,
-            pad_token_id=tokenizer.eos_token_id
+    def call_ollama(data):
+        request = urllib.request.Request(
+            OLLAMA_URL,
+            data=json.dumps(data).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
         )
+        with urllib.request.urlopen(request, timeout=600) as response:
+            return json.loads(response.read().decode("utf-8"))
 
-    generated = outputs[0][
-        inputs.input_ids.shape[1]:
-    ]
+    try:
+        try:
+            result = call_ollama(payload)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 400:
+                raise
 
-    answer = tokenizer.decode(
-        generated,
-        skip_special_tokens=True
-    ).strip()
+            error_text = exc.read().decode("utf-8", "replace")
+            if "think" not in error_text.lower():
+                raise
 
-    print("\nQwen raw output:")
-    print(answer)
+            payload.pop("think", None)
+            result = call_ollama(payload)
 
-    architecture = extract_json(answer)
+        answer = result.get("message", {}).get("content", "").strip()
 
-    if architecture is None:
+        if not answer:
+            raise ValueError("Ollama returned an empty response.")
 
-        print(
-            "Could not parse Qwen output as JSON."
-        )
+        architecture = extract_json(answer)
 
-        return {
-            "nodes": [],
-            "edges": []
-        }
+        if architecture is None:
+            raise ValueError("Qwen did not return valid JSON.")
 
-    cleaned_architecture = clean_architecture(
-        architecture
-    )
+        cleaned = clean_architecture(architecture)
 
-    print("\nCleaned architecture:")
+        if not cleaned["nodes"]:
+            raise ValueError("No valid architecture nodes were generated.")
 
-    print(
-        json.dumps(
-            cleaned_architecture,
-            indent=2
-        )
-    )
+        return cleaned
 
-    return cleaned_architecture
+    except Exception as exc:
+        print(f"Architecture generation failed: {exc}")
+        raise RuntimeError(
+            f"Could not generate architecture: {exc}"
+        ) from exc
+
 
 
 # ---------------------------------------------------------
