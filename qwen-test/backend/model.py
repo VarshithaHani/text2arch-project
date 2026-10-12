@@ -22,32 +22,31 @@ Return ONLY valid JSON in exactly this format:
 
 {
   "nodes": [
-    {"id": "unique_id", "label": "Component Name"}
+    {"id": "customer", "label": "Customer", "shape": "ellipse"},
+    {"id": "service", "label": "Shopping Service", "shape": "box"},
+    {"id": "check", "label": "Product Availability Check", "shape": "diamond"},
+    {"id": "database", "label": "Product Database", "shape": "cylinder"}
   ],
   "edges": [
-    {"source": "node_id", "target": "node_id"}
+    {"source": "customer", "target": "service"}
   ]
 }
 
+Allowed node shapes:
+ellipse, box, diamond, cylinder, parallelogram,
+hexagon, doublecircle.
+
 Rules:
+- Choose a shape requested in the user's description.
+- If no shape is requested, use ellipse.
+- Every node must include id, label, and shape.
 - Create nodes only for components explicitly mentioned.
-- Components include frontend, backend, API, database, cache, queue,
-  server, user, external service, worker, gateway, etc.
-- Do not invent components.
-- Do not create nodes for actions, protocols, or data unless explicitly
-  described as components.
-- Create an edge only when the text explicitly says two components
-  communicate, connect, call, access, use, send to, store in, retrieve
-  from, or forward to each other.
+- Create edges according to the described connections.
 - Preserve relationship direction.
-- Do not infer indirect relationships.
-- Do not create duplicate nodes or edges.
 - Node IDs must use lowercase letters, numbers, and underscores only.
 - Every edge endpoint must exactly match a node ID.
-- Never use null.
-- Return JSON only. No markdown, explanation, or comments.
+- Return valid JSON only. No markdown or explanation.
 """
-
 
 # ---------------------------------------------------------
 # JSON EXTRACTION
@@ -101,6 +100,7 @@ def extract_json(text: str):
 # CLEAN / VALIDATE ARCHITECTURE
 # ---------------------------------------------------------
 
+
 def clean_architecture(data):
 
     if not isinstance(data, dict):
@@ -120,6 +120,19 @@ def clean_architecture(data):
 
     nodes = []
     node_ids = set()
+
+    # Allowed Graphviz node shapes
+    allowed_shapes = {
+        "ellipse",
+        "oval",
+        "box",
+        "rectangle",
+        "diamond",
+        "cylinder",
+        "parallelogram",
+        "hexagon",
+        "doublecircle"
+    }
 
     # -------------------------
     # Nodes
@@ -144,6 +157,7 @@ def clean_architecture(data):
         if node_id.lower() == "null":
             continue
 
+        # Normalize node ID
         node_id = re.sub(
             r"[^a-zA-Z0-9_]",
             "_",
@@ -159,6 +173,7 @@ def clean_architecture(data):
         if not node_id:
             continue
 
+        # Ensure node IDs are unique
         original_id = node_id
         counter = 2
 
@@ -166,12 +181,83 @@ def clean_architecture(data):
             node_id = f"{original_id}_{counter}"
             counter += 1
 
+        # Read and validate the requested shape
+        shape = str(
+            node.get("shape", "ellipse")
+        ).strip().lower()
+
+        if shape not in allowed_shapes:
+            shape = "ellipse"
+
+        # Convert common aliases to Graphviz names
+        if shape == "oval":
+            shape = "ellipse"
+        elif shape == "rectangle":
+            shape = "box"
+
+        # Preserve shape along with ID and label
         nodes.append({
             "id": node_id,
-            "label": label
+            "label": label,
+            "shape": shape
         })
 
         node_ids.add(node_id)
+
+    # -------------------------
+    # Edges
+    # -------------------------
+
+    edges = []
+    edge_set = set()
+
+    for edge in raw_edges:
+
+        if not isinstance(edge, dict):
+            continue
+
+        source = str(
+            edge.get("source", "")
+        ).strip()
+
+        target = str(
+            edge.get("target", "")
+        ).strip()
+
+        if not source or not target:
+            continue
+
+        if source.lower() == "null":
+            continue
+
+        if target.lower() == "null":
+            continue
+
+        # Keep only edges whose endpoints exist
+        if source not in node_ids:
+            continue
+
+        if target not in node_ids:
+            continue
+
+        edge_key = (source, target)
+
+        # Avoid duplicate edges
+        if edge_key in edge_set:
+            continue
+
+        edges.append({
+            "source": source,
+            "target": target
+        })
+
+        edge_set.add(edge_key)
+
+    return {
+        "nodes": nodes,
+        "edges": edges
+    }
+
 
     # -------------------------
     # Edges
@@ -230,6 +316,7 @@ def clean_architecture(data):
 # JSON -> DOT
 # ---------------------------------------------------------
 
+
 def architecture_to_dot(data):
 
     lines = [
@@ -238,17 +325,37 @@ def architecture_to_dot(data):
         ""
     ]
 
+    # Generate nodes with their requested shapes
+    allowed_shapes = {
+        "ellipse", "oval", "box", "rectangle",
+        "diamond", "cylinder", "parallelogram",
+        "hexagon", "doublecircle"
+    }
+
     for node in data["nodes"]:
 
         node_id = node["id"]
         label = node["label"].replace('"', '\\"')
 
+        # Use the requested shape, or ellipse by default
+        shape = str(node.get("shape", "ellipse")).lower()
+
+        if shape not in allowed_shapes:
+            shape = "ellipse"
+
+        # Graphviz uses box for rectangles and ellipse for ovals
+        if shape == "rectangle":
+            shape = "box"
+        elif shape == "oval":
+            shape = "ellipse"
+
         lines.append(
-            f'    {node_id} [label="{label}"];'
+            f'    {node_id} [label="{label}", shape="{shape}"];'
         )
 
     lines.append("")
 
+    # Generate connections between nodes
     for edge in data["edges"]:
 
         source = edge["source"]
@@ -261,7 +368,6 @@ def architecture_to_dot(data):
     lines.append("}")
 
     return "\n".join(lines)
-
 
 # ---------------------------------------------------------
 # GENERATE ARCHITECTURE
