@@ -10,20 +10,25 @@ let architectureData = {
 };
 const $ = id => document.getElementById(id);
 // GENERATE ARCHITECTURE
+
 async function generateArchitecture() {
     const description = $("description").value.trim();
     const button = $("generateBtn");
     const status = $("status");
     const container = $("diagramContainer");
+
     if (!description) {
-        status.textContent = "Please enter an architecture description.";
+        status.textContent =
+            "Please enter an architecture description.";
         return;
     }
+
     button.disabled = true;
     button.textContent = "Generating...";
     status.textContent = "Generating architecture...";
     container.innerHTML =
         '<p class="placeholder">Generating architecture diagram...</p>';
+
     try {
         const response = await fetch(
             "http://127.0.0.1:8000/generate",
@@ -32,65 +37,96 @@ async function generateArchitecture() {
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    description: description
-                })
+                body: JSON.stringify({ description })
             }
         );
+
         if (!response.ok) {
-            throw new Error(`Backend error: ${response.status}`);
-        }
-        const data = await response.json();
-        if (!data.dot) {
-            throw new Error("No DOT code received from backend.");
-        }
-        const dot = cleanDOT(data.dot);
-        console.log("Original DOT:", dot);
-        const graphvizResponse = await fetch(
-            "https://quickchart.io/graphviz",
-            {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    graph: makeHorizontalDOT(dot),
-                    format: "svg"
-                })
-            }
-        );
-        if (!graphvizResponse.ok) {
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(
-                "Could not generate the architecture diagram."
+                errorData.detail || `Backend error: ${response.status}`
             );
         }
-        container.innerHTML =
-            await graphvizResponse.text();
+
+        const data = await response.json();
+
+        if (!data.dot || !data.image_url) {
+            throw new Error(
+                "Backend did not return DOT code and an image URL."
+            );
+        }
+
+        // Keep the original DOT for the editor's architecture data.
+        const dot = cleanDOT(data.dot);
+
+        // Fetch the SVG generated locally by Graphviz.
+        const svgResponse = await fetch(
+            new URL(data.image_url, "http://127.0.0.1:8000").href
+        );
+
+        if (!svgResponse.ok) {
+            throw new Error("Could not load the Graphviz SVG.");
+        }
+
+        const svgText = await svgResponse.text();
+
+        // Inline the SVG so node and edge editing still works.
+        const parsedDocument = new DOMParser().parseFromString(
+            svgText,
+            "image/svg+xml"
+        );
+
+        if (parsedDocument.querySelector("parsererror")) {
+            throw new Error("Graphviz returned invalid SVG.");
+        }
+
+        const svg = parsedDocument.documentElement;
+
+        if (
+            svg.localName !== "svg" ||
+            svg.namespaceURI !== "http://www.w3.org/2000/svg"
+        ) {
+            throw new Error("The returned file is not an SVG diagram.");
+        }
+
+        container.replaceChildren(
+            document.importNode(svg, true)
+        );
+
         extractArchitectureData(dot);
         prepareDiagram();
+
         selectedNode = null;
         selectedEdge = null;
         edgeSourceNode = null;
         editorMode = "select";
         diagramZoom = 1;
+
+        updateDiagramZoom();
         updateStatistics();
         updateSelectedNodeDisplay();
+
         updateEditorStatus(
             "Architecture generated. Select a node to edit it."
         );
+
         status.textContent =
-            "Architecture generated successfully.";
+            "Architecture generated successfully using Graphviz.";
+
     } catch (error) {
         console.error(error);
-        status.textContent =
-            "Error: " + error.message;
+
+        status.textContent = "Error: " + error.message;
         container.innerHTML =
             '<p class="placeholder">Failed to generate architecture diagram.</p>';
+
         architectureData = {
             nodes: [],
             edges: []
         };
+
         updateStatistics();
+
     } finally {
         button.disabled = false;
         button.textContent = "Generate Architecture";
