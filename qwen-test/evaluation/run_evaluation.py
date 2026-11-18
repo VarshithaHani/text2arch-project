@@ -26,7 +26,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime
 
-from evaluate import evaluate_prediction, extract_ground_truth, parse_dot, repair_dot
+from difflib import SequenceMatcher
+from evaluate import evaluate_prediction, extract_ground_truth, parse_dot, repair_dot, normalize_name
 from metrics import macro_average, micro_average
 
 # Windows consoles choke on characters like 'ΔH' / 'ŷ' -> never crash on print
@@ -80,7 +81,90 @@ digraph {
   "Encoder" -> "Decoder"
   "Decoder" -> "Output Image"
 }""",
+    # flow + exact-wording rules + fan-in/fan-out example
+    
+    "flow2": """You convert a textual description of an architecture diagram into Graphviz DOT.
 
+Rules:
+1. Output ONLY valid DOT code, starting with digraph { and ending with }.
+2. Represent every distinct component, module, layer, input, output, operation and data item mentioned in the description as a node.
+3. Preserve technical component details from the description. For example, if Feature Extraction uses Improved Local Binary Patterns (ILBP), name the node "Feature Extraction (ILBP)". If a Classifier uses an Evaluated Kullback-Leibler method, name it "Classifier (Evaluated Kullback-Leibler)". Do not discard technical methods, algorithms or distinguishing details when naming nodes.
+4. Include all inputs and outputs as separate nodes.
+5. Create directed edges according to the described data flow. If multiple inputs enter one component, connect every input to that component.
+6. Track every intermediate data item between components. If extracted features are stored in a database and later passed to a classifier, include the database as a node and connect it to the classifier.
+7. Preserve all branches, parallel paths, sequential connections, skip connections, feedback connections and merging operations explicitly mentioned.
+8. If a component produces multiple outputs, create an edge to each output.
+9. If multiple components contribute to one operation, connect each contributing component to that operation.
+10. For repeated or numbered components, create separate nodes when the description distinguishes them.
+11. Do not omit components simply because they appear inside a repeated block or group.
+12. Do not invent components or connections that are not supported by the description.
+13. Do not connect components merely because they are mentioned together.
+14. Do not create nodes for section headings or decorative group names.
+15. Keep useful details in parentheses and preserve dimensions and identifiers when they distinguish components.
+16. Put every node name in double quotes. Use one edge per line. Do not use attributes, edge labels, subgraphs or clusters.
+17. Do not create isolated nodes unless they are explicitly described as independent inputs, outputs or components.
+
+Example description:
+Input Image is passed to Encoder. Encoder produces Features. Features are passed to Decoder, which generates Output Image.
+
+Example output:
+digraph {
+  "Input Image" -> "Encoder"
+  "Encoder" -> "Features"
+  "Features" -> "Decoder"
+  "Decoder" -> "Output Image"
+}""",
+"qwen4b": """You are an architecture diagram generator.
+Convert the given description into a directed Graphviz DOT graph.
+
+OUTPUT:
+- Return only valid DOT code.
+- Start with digraph G {
+- End with }
+- Use double quotes around every node name.
+- Write one directed edge per line.
+- Do not include explanations, Markdown, labels, attributes, or clusters.
+
+NODE RULES:
+1. Include every explicitly mentioned component, module, layer,
+   input, output, operation, and intermediate data item.
+2. Preserve technical names, abbreviations, algorithms,
+   dimensions, and identifiers.
+3. Use the component names from the description.
+4. Do not invent components.
+5. Do not create nodes for headings or decorative groups.
+
+EDGE RULES:
+1. Follow the direction of data flow.
+2. Connect components only when a relationship is described.
+3. Connect every input to the operation that uses it.
+4. Connect every output produced by a component.
+5. Preserve sequential, parallel, branching, merging,
+   feedback, and skip connections.
+6. Include intermediate data items when they are explicitly
+   described as being passed between components.
+7. Do not create duplicate edges.
+8. Do not connect components just because they are mentioned
+   together.
+
+EXAMPLE:
+
+Description:
+The Input Image is passed to the Encoder.
+The Encoder extracts Features.
+The Features are processed by the Decoder.
+The Decoder generates the Output Image.
+
+Output:
+digraph G {
+    "Input Image" -> "Encoder"
+    "Encoder" -> "Features"
+    "Features" -> "Decoder"
+    "Decoder" -> "Output Image"
+}
+
+Now convert the architecture description into DOT.
+""",
     # Short prompt + one worked example: what 0.5B-3B models follow reliably
     "small": """Convert the description into Graphviz DOT.
 
@@ -105,7 +189,7 @@ digraph G {
 }""",
 }
 
-SMALL_MODEL = re.compile(r"[:\-_/ ](0\.5|1\.5|1|2|3)b(?![a-z0-9.])", re.I)
+SMALL_MODEL = re.compile(r"[:\\\-/ ](0\.5|1\.5|1|2|3)b(?![a-z0-9.])", re.I)
 
 
 def resolve_prompt(args):
@@ -250,7 +334,7 @@ def generate_dot(description, args):
                        if meta["had_thinking_field"] else "empty response")
                 raise ValueError(f"Ollama returned empty content: {why}.")
             dot, notes = extract_dot(content)
-            _, edges = parse_dot(dot)
+            edges = parse_dot(dot)["edges"]
             if not edges:
                 raise ValueError("generated DOT contains no edges.")
         except ValueError as e:
@@ -275,8 +359,70 @@ def dot_renders(dot):
         return proc.returncode == 0
     except Exception:
         return False
+def _flat(s):
+    return re.sub(r"\s+", " ", re.sub(r"[^\w]+", " ", normalize_name(s))).strip()
 
 
+def acronym_map(description):
+    """'Sparse Point Prediction Network (SPPN)' -> {'sppn': 'Sparse Point Prediction Network'}"""
+    acro = {}
+    for m in re.finditer(r"\(([A-Za-z]{2,10})\)", description):
+        abbr = m.group(1)
+        before = re.findall(r"[\w\-]+", description[:m.start()])
+        k = len(abbr)
+        if len(before) >= k:
+            cand = before[-k:]
+            if "".join(w[0] for w in cand).lower() == abbr.lower():
+                acro[abbr.lower()] = " ".join(cand)
+    return acro
+
+def postprocess(dot, description, drop_ungrounded=False, threshold=0.9, fuzzy=False):
+    graph = parse_dot(dot)
+    acro = acronym_map(description)
+    text = description.replace("*", " ")
+    desc_flat = " " + _flat(text) + " "
+
+    grams = {}
+    if fuzzy:
+        words = [w.strip(".,;:-") for w in re.findall(r"[\w.\-]+", text)]
+        words = [w for w in words if w]
+        for n in range(1, 6):
+            for i in range(len(words) - n + 1):
+                g = " ".join(words[i:i + n])
+                grams.setdefault(_flat(g), g)
+
+    mapping = {}
+    for node in graph["nodes"]:
+        name = node.replace("*", "").strip().strip('"')
+        flat = _flat(name)
+        if not flat:
+            mapping[node] = None
+        elif name.lower() in acro:                    # SPPN -> Sparse Point Prediction Network
+            mapping[node] = acro[name.lower()]
+        elif f" {flat} " in desc_flat:                # phrase is in the text: keep the model's name
+            mapping[node] = name
+        elif fuzzy:
+            best, best_score = None, 0.0
+            for gflat, g in grams.items():
+                if abs(len(gflat.split()) - len(flat.split())) > 1:
+                    continue
+                s = SequenceMatcher(None, flat, gflat).ratio()
+                if s > best_score:
+                    best, best_score = g, s
+            mapping[node] = best if best_score >= threshold else (None if drop_ungrounded else name)
+        else:
+            mapping[node] = None if drop_ungrounded else name
+
+    edges, seen = [], set()
+    for s, t in sorted(graph["edges"]):
+        s2, t2 = mapping.get(s), mapping.get(t)
+        if not s2 or not t2 or s2 == t2 or (s2, t2) in seen:
+            continue
+        seen.add((s2, t2))
+        edges.append((s2, t2))
+
+    q = lambda x: '"' + x.replace('"', '\\"') + '"'
+    return "\n".join(["digraph G {"] + [f"  {q(s)} -> {q(t)}" for s, t in edges] + ["}"]) 
 # ------------------------------------------------------------------
 # dataset
 # ------------------------------------------------------------------
@@ -367,17 +513,19 @@ def main():
     ap = argparse.ArgumentParser(description="Evaluate an Ollama model on Text2Arch manual.tsv")
     ap.add_argument("--model", default="qwen3:8b")
     ap.add_argument("--dataset", default=None, help="path to manual.tsv")
-    ap.add_argument("--samples", type=int, default=5, help="how many rows to evaluate")
+    ap.add_argument("--samples", type=int, default=99, help="how many rows to evaluate")
     ap.add_argument("--start", type=int, default=1, help="first row (1-based)")
     ap.add_argument("--all", action="store_true", help="evaluate every row")
     ap.add_argument("--prompt", choices=["auto"] + sorted(PROMPTS), default="auto",
                     help="auto = 'small' for <=3B models, 'flow' otherwise")
-    ap.add_argument("--max-tokens", type=int, default=1500)
-    ap.add_argument("--num-ctx", type=int, default=8192)
+    ap.add_argument("--max-tokens", type=int, default=1000)
+    ap.add_argument("--num-ctx", type=int, default=4096)
     ap.add_argument("--timeout", type=int, default=900)
     ap.add_argument("--think", nargs="?", const="on", choices=["auto", "on", "off"], default="auto",
                     help="auto = off for qwen3/deepseek-r1, not sent to other models")
-    ap.add_argument("--retries", type=int, default=1, help="extra attempts if the output is unusable")
+    ap.add_argument("--retries", type=int, default=0, help="extra attempts if the output is unusable")
+    ap.add_argument("--postprocess", action="store_true", help="snap predicted names to phrases in the description")
+    ap.add_argument("--drop-ungrounded", action="store_true", help="drop nodes that match nothing in the description")
     args = ap.parse_args()
 
     print("=" * 60)
@@ -435,13 +583,16 @@ def main():
                 gt_dot = row["Dot code"] or ""
                 if not description:
                     raise ValueError("empty description")
-                exp_nodes, exp_edges = extract_ground_truth(gt_dot)
+                ground_truth = extract_ground_truth(gt_dot)
+                exp_nodes = ground_truth["nodes"]
+                exp_edges = ground_truth["edges"]
                 if not exp_edges:
                     raise ValueError("ground truth has no parsable edges (bad row in dataset)")
 
                 t1 = time.time()
                 print("Generating DOT ...", flush=True)
                 raw, pred_dot, notes, meta = generate_dot(description, args)
+                if args.postprocess:pred_dot = postprocess(pred_dot, clean_description(description), args.drop_ungrounded)
                 print(f"({time.time() - t1:.0f}s, {meta['eval_count']} tokens, stop={meta['done_reason']})")
                 for n in notes:
                     print("  note:", n)

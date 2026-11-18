@@ -7,12 +7,15 @@ _QUOTED = re.compile(r'"((?:\\.|[^"\\])*)"')
 _ARROW_VARIANTS = re.compile(r"\s*(?:-->|-{1,2}>|=>|→|⟶|➔|➜)\s*")
 
 
+
 def normalize_name(name):
-    """Normalize labels for fair comparison."""
+    """Normalize labels for case and separator differences."""
     name = str(name).strip().strip('"').strip("'")
     name = name.replace("\\n", " ").replace("\n", " ")
+    name = re.sub(r"[_-]+", " ", name)
     name = re.sub(r"\s+", " ", name)
     return name.lower().strip()
+
 
 
 def _split_statements(dot):
@@ -59,6 +62,8 @@ def repair_dot(dot):
     dot = re.sub(r"```(?:dot|graphviz)?", "", dot, flags=re.IGNORECASE)
     dot = dot.replace("```", "")
     dot = dot.replace("\r", "\n")
+    dot = dot.replace("\\n", "\n")
+    dot = dot.replace('R"t-tree', 'R-tree')
 
     repaired = []
     for line in dot.splitlines():
@@ -110,19 +115,25 @@ def _unquote(value):
 def parse_dot(dot):
     """Return node labels and directed edges from Graphviz DOT."""
     dot = repair_dot(dot)
+
     nodes = set()
     edges = set()
     id_to_label = {}
 
     for statement in _split_statements(dot):
-        statement = statement.strip().rstrip(";")
+        statement = statement.strip().rstrip(";").strip()
+
+        if not statement:
+            continue
+
+        statement = statement.strip("{} \t\r\n")
+
         if not statement:
             continue
 
         if statement.startswith("//") or statement.startswith("#"):
             continue
 
-        # Ignore graph declarations and attributes.
         if re.match(
             r"^(strict\s+)?(di)?graph\b|^(node|edge|graph)\s*\[",
             statement,
@@ -130,7 +141,7 @@ def parse_dot(dot):
         ):
             continue
 
-        # Split a statement into directed edges, preserving quoted text.
+        # Find directed arrows outside quoted strings.
         arrow_positions = []
         quoted = False
         escaped = False
@@ -166,30 +177,38 @@ def parse_dot(dot):
         if arrow_positions:
             pieces = []
             start = 0
+
             for left, right in arrow_positions:
                 pieces.append(statement[start:left].strip())
                 start = right
+
             pieces.append(statement[start:].strip())
 
             ids = []
+
             for piece in pieces:
-                match = re.match(r'^\s*("[^"]+"|[^\s\[]+)', piece)
+                match = re.match(
+                    r'^\s*("(?:\\.|[^"\\])*"|[A-Za-z_][\w.]*|-?\d+)',
+                    piece,
+                )
+
                 if match:
                     ids.append(_unquote(match.group(1)))
 
             for node_id in ids:
-                nodes.add(node_id)
                 id_to_label.setdefault(node_id, node_id)
 
             for source, target in zip(ids, ids[1:]):
                 edges.add((source, target))
+
             continue
 
-        # Parse ordinary node declarations, including label attributes.
+        # Parse ordinary node declarations.
         match = re.match(
-            r'^\s*("[^"]+"|[^\s\[]+)\s*(?:\[(.*)\])?\s*$',
+            r'^\s*("(?:\\.|[^"\\])*"|[A-Za-z_][\w.]*|-?\d+)\s*(?:\[(.*)\])?\s*$',
             statement,
         )
+
         if not match:
             continue
 
@@ -201,13 +220,19 @@ def parse_dot(dot):
             attrs,
             re.IGNORECASE,
         )
-        label = _unquote(label_match.group(1)) if label_match else node_id
 
-        nodes.add(label)
+        label = (
+            _unquote(label_match.group(1).strip())
+            if label_match
+            else node_id
+        )
+
         id_to_label[node_id] = label
+        nodes.add(label)
 
-    # Convert edge identifiers to display labels where possible.
+    # Convert edge IDs into display labels.
     display_edges = set()
+
     for source, target in edges:
         display_edges.add(
             (
@@ -216,8 +241,15 @@ def parse_dot(dot):
             )
         )
 
+    # Include edge endpoints in the node set.
+    for source, target in display_edges:
+        nodes.add(source)
+        nodes.add(target)
+
     return {"nodes": nodes, "edges": display_edges}
 
+def extract_ground_truth(ground_truth_dot):
+    return parse_dot(ground_truth_dot.replace("|", "\n"))
 
 def _best_match(name, candidates):
     if not candidates:
@@ -243,29 +275,30 @@ def _score_sets(expected, predicted):
     expected = set(expected)
     predicted = set(predicted)
 
-    true_positive = len(expected & predicted)
-    precision = (
-        true_positive / len(predicted) if predicted else 0.0
-    )
-    recall = (
-        true_positive / len(expected) if expected else 0.0
-    )
+    tp = len(expected & predicted)
+    fp = len(predicted - expected)
+    fn = len(expected - predicted)
+
+    precision = tp / len(predicted) if predicted else 0.0
+    recall = tp / len(expected) if expected else 0.0
     f1 = (
         2 * precision * recall / (precision + recall)
-        if precision + recall
-        else 0.0
+        if precision + recall else 0.0
     )
     union = expected | predicted
-    jaccard = len(expected & predicted) / len(union) if union else 1.0
+    jaccard = tp / len(union) if union else 1.0
 
     return {
         "precision": precision,
         "recall": recall,
         "f1": f1,
         "jaccard": jaccard,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
         "expected_count": len(expected),
         "predicted_count": len(predicted),
-        "matched_count": true_positive,
+        "matched_count": tp,
     }
 
 
@@ -280,60 +313,88 @@ def _normalized_edges(edges):
     }
 
 
+
 def evaluate_prediction(expected, predicted, mode="normalized"):
     """
-    Compare parsed DOT structures.
-
-    expected and predicted should each contain:
-        {"nodes": set(...), "edges": set((source, target), ...)}
+    Compare expected and predicted DOT strings.
+    Fuzzy matching uses one-to-one node assignments.
     """
-    expected_nodes = set(expected.get("nodes", set()))
-    predicted_nodes = set(predicted.get("nodes", set()))
-    expected_edges = set(expected.get("edges", set()))
-    predicted_edges = set(predicted.get("edges", set()))
+    try:
+        from scipy.optimize import linear_sum_assignment
 
-    if mode == "exact":
-        nodes = _score_sets(expected_nodes, predicted_nodes)
-        edges = _score_sets(expected_edges, predicted_edges)
+        expected_data = extract_ground_truth(expected)
+        predicted_data = parse_dot(predicted)
 
-    elif mode == "normalized":
-        nodes = _score_sets(
-            _normalized_nodes(expected_nodes),
-            _normalized_nodes(predicted_nodes),
-        )
-        edges = _score_sets(
-            _normalized_edges(expected_edges),
-            _normalized_edges(predicted_edges),
-        )
+        expected_nodes = set(expected_data["nodes"])
+        expected_edges = set(expected_data["edges"])
+        predicted_nodes = set(predicted_data["nodes"])
+        predicted_edges = set(predicted_data["edges"])
 
-    elif mode == "fuzzy":
-        node_mapping = {}
-        for node in predicted_nodes:
-            match, score = _best_match(node, expected_nodes)
-            if match is not None and score >= 0.75:
-                node_mapping[node] = match
+        if mode == "exact":
+            en, ee = expected_nodes, expected_edges
+            pn, pe = predicted_nodes, predicted_edges
 
-        mapped_nodes = {
-            node_mapping.get(node, f"__unmatched__:{normalize_name(node)}")
-            for node in predicted_nodes
+        elif mode == "normalized":
+            en = _normalized_nodes(expected_nodes)
+            ee = _normalized_edges(expected_edges)
+            pn = _normalized_nodes(predicted_nodes)
+            pe = _normalized_edges(predicted_edges)
+
+        elif mode == "fuzzy":
+            expected_list = sorted(expected_nodes)
+            predicted_list = sorted(predicted_nodes)
+
+            node_mapping = {}
+
+            if expected_list and predicted_list:
+                scores = [
+                    [
+                        SequenceMatcher(
+                            None,
+                            normalize_name(pred),
+                            normalize_name(exp)
+                        ).ratio()
+                        for exp in expected_list
+                    ]
+                    for pred in predicted_list
+                ]
+
+                rows, cols = linear_sum_assignment(
+                    [[-score for score in row] for row in scores]
+                )
+
+                for row, col in zip(rows, cols):
+                    if scores[row][col] >= 0.75:
+                        node_mapping[predicted_list[row]] = expected_list[col]
+
+            en = expected_nodes
+            pn = {
+                node_mapping.get(node, f"__unmatched__:{normalize_name(node)}")
+                for node in predicted_nodes
+            }
+
+            ee = expected_edges
+            pe = {
+                (
+                    node_mapping.get(source, f"__unmatched__:{normalize_name(source)}"),
+                    node_mapping.get(target, f"__unmatched__:{normalize_name(target)}")
+                )
+                for source, target in predicted_edges
+            }
+
+        else:
+            raise ValueError("Invalid mode")
+
+        return {
+            "valid": True,
+            "mode": mode,
+            "expected_nodes": en,
+            "expected_edges": ee,
+            "predicted_nodes": pn,
+            "predicted_edges": pe,
+            "node_metrics": _score_sets(en, pn),
+            "edge_metrics": _score_sets(ee, pe),
         }
 
-        mapped_edges = set()
-        for source, target in predicted_edges:
-            mapped_source = node_mapping.get(
-                source, f"__unmatched__:{normalize_name(source)}"
-            )
-            mapped_target = node_mapping.get(
-                target, f"__unmatched__:{normalize_name(target)}"
-            )
-            mapped_edges.add((mapped_source, mapped_target))
-
-        nodes = _score_sets(expected_nodes, mapped_nodes)
-        edges = _score_sets(expected_edges, mapped_edges)
-
-    else:
-        raise ValueError(
-            "mode must be 'exact', 'normalized', or 'fuzzy'"
-        )
-
-    return {"nodes": nodes, "edges": edges}
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
